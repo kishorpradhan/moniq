@@ -1,1 +1,9 @@
 node_modules
+.next
+.venv
+.terraform
+terraform.tfstate
+terraform.tfstate.*
+terraform.tfvars
+.env
+.env.*

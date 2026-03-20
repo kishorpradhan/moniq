@@ -1,0 +1,11 @@
+project_id   = "moniq-490803"
+region       = "us-central1"
+worker_image = "us-central1-docker.pkg.dev/moniq-490803/moniq/ingest-worker:latest"
+uploads_bucket_name = "moniq-client-uploads"
+uploaded_files_topic_name = "uploadedfiles"
+enable_worker = false
+upload_api_image = "us-central1-docker.pkg.dev/moniq-490803/moniq/upload-api:latest"
+enable_upload_api = false
+upload_api_invoker_service_account = ""
+upload_api_key = "replace-with-strong-random-key"
+artifact_repo_name = "moniq"
