@@ -1,26 +1,30 @@
 import { NextResponse } from "next/server";
 
-export async function POST(request: Request) {
-  const uploadApiUrl = process.env.UPLOAD_API_URL;
-  const uploadApiKey = process.env.UPLOAD_API_KEY;
+export const dynamic = "force-dynamic";
 
-  if (!uploadApiUrl || !uploadApiKey) {
-    return NextResponse.json({ detail: "Server not configured" }, { status: 500 });
+export async function POST(request: Request) {
+  const baseUrl = process.env.UPLOAD_API_URL;
+  const apiKey = process.env.UPLOAD_API_KEY;
+  if (!baseUrl) {
+    return NextResponse.json({ error: "Missing UPLOAD_API_URL" }, { status: 500 });
+  }
+  if (!apiKey) {
+    return NextResponse.json({ error: "Missing UPLOAD_API_KEY" }, { status: 500 });
   }
 
-  const payload = await request.json();
-  const response = await fetch(`${uploadApiUrl}/uploads/presign`, {
+  const body = await request.text();
+  const res = await fetch(new URL("/uploads/presign", baseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": uploadApiKey,
+      "x-api-key": apiKey,
     },
-    body: JSON.stringify(payload),
+    body,
   });
 
-  const body = await response.text();
-  return new NextResponse(body, {
-    status: response.status,
+  const payload = await res.text();
+  return new NextResponse(payload, {
+    status: res.status,
     headers: { "Content-Type": "application/json" },
   });
 }

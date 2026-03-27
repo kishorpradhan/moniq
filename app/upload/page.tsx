@@ -3,24 +3,10 @@
 import { useRef, useState } from "react";
 
 import Shell from "@/components/Shell";
-
-type UploadEntry = {
-  id: number;
-  name: string;
-  date: string;
-  rows?: number;
-  status: "success" | "failed";
-};
-
-const initialUploads: UploadEntry[] = [
-  { id: 1, name: "portfolio-march.csv", date: "2026-03-18", rows: 37, status: "success" },
-  { id: 2, name: "my-holdings.csv", date: "2026-03-10", rows: 28, status: "success" },
-  { id: 3, name: "initial-seed.csv", date: "2026-02-25", rows: 15, status: "success" },
-];
+import RecentUploads from "@/components/RecentUploads";
 
 export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploads, setUploads] = useState<UploadEntry[]>(initialUploads);
   const [status, setStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
 
@@ -70,29 +56,9 @@ export default function UploadPage() {
         throw new Error("Failed to finalize upload");
       }
 
-      const today = new Date();
-      const date = today.toISOString().slice(0, 10);
-      setUploads((prev) => [
-        {
-          id: Date.now(),
-          name: file.name,
-          date,
-          status: "success",
-        },
-        ...prev,
-      ]);
       setStatus("Upload complete.");
     } catch (error) {
       setStatus("Upload failed. Try again.");
-      setUploads((prev) => [
-        {
-          id: Date.now(),
-          name: file.name,
-          date: new Date().toISOString().slice(0, 10),
-          status: "failed",
-        },
-        ...prev,
-      ]);
     } finally {
       setIsUploading(false);
     }
@@ -132,25 +98,9 @@ export default function UploadPage() {
           <p className="mt-2 text-xs text-slate-500">{status || "Ready to upload."}</p>
         </div>
 
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold text-slate-800">Recent Uploads</h2>
-          <div className="mt-3 space-y-3">
-            {uploads.map((upload) => (
-              <div key={upload.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex justify-between text-sm text-slate-700">
-                  <span className="font-medium text-slate-900">{upload.name}</span>
-                  <span>{upload.date}</span>
-                </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {upload.status === "success"
-                    ? `${upload.rows ?? "Pending"} rows imported`
-                    : "Upload failed"}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
+
+      <RecentUploads />
     </Shell>
   );
 }

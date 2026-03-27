@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from google.cloud import pubsub_v1
 from google.auth import default as google_auth_default
+from google.auth import impersonated_credentials
 from google.auth.transport.requests import Request as GoogleAuthRequest
 
 from app.config.storage import bucket, bucket_name
@@ -52,13 +53,19 @@ def presign(payload: PresignRequest):
             scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
         credentials.refresh(GoogleAuthRequest())
+        signer = impersonated_credentials.Credentials(
+            source_credentials=credentials,
+            target_principal=signer_email,
+            target_scopes=["https://www.googleapis.com/auth/devstorage.read_write"],
+            lifetime=15 * 60,
+        )
         upload_url = blob.generate_signed_url(
             version="v4",
             expiration=15 * 60,
             method="PUT",
             content_type=payload.contentType,
             service_account_email=signer_email,
-            access_token=credentials.token,
+            credentials=signer,
         )
     else:
         upload_url = blob.generate_signed_url(
@@ -82,7 +89,7 @@ def complete(payload: CompleteRequest):
             detail="Missing Pub/Sub config (UPLOADED_FILES_TOPIC and GOOGLE_CLOUD_PROJECT)",
         )
 
-    message = json.dumps({"bucket": bucket_name}).encode("utf-8")
+    message = json.dumps({"bucket": bucket_name, "name": payload.filePath}).encode("utf-8")
     publish_future = publisher.publish(topic_path, message)
     publish_future.result(timeout=5)
 

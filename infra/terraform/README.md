@@ -7,6 +7,7 @@ Creates:
 - Upload API service account
 - IAM wiring (GCS -> Pub/Sub, Pub/Sub -> Cloud Run, upload API publisher)
 - Artifact Registry repo (Docker)
+- Cloud SQL Postgres instance + database + users (upload/read) + secrets
 
 ## Prereqs
 - Terraform >= 1.5
@@ -23,6 +24,7 @@ Creates:
 7. Set `upload_api_invoker_service_account` to the frontend service account email
 8. Set `upload_api_key` to a strong random value (used for x-api-key)
 9. (Optional) Set `artifact_repo_name` if you want a different Artifact Registry repo
+10. (Optional) Set `db_tier`/`db_version`/`db_instance_name` if you want different DB settings
 
 ## Apply
 ```bash
@@ -36,6 +38,12 @@ terraform apply
 - `upload_api_service_account`
 - `cloud_run_service_url`
 - `upload_api_url`
+- `db_instance_connection_name`
+- `db_name`
+- `db_user_upload`
+- `db_user_read`
+- `db_password_upload_secret`
+- `db_password_read_secret`
 
 Use `bucket_name` as `GCS_BUCKET` in the upload API.
 Use `uploaded_files_topic` as the Pub/Sub topic for upload notifications.

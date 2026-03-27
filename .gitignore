@@ -1,6 +1,9 @@
 node_modules
 .next
 .venv
+.venv311
+__pycache__/
+*.pyc
 .terraform
 terraform.tfstate
 terraform.tfstate.*

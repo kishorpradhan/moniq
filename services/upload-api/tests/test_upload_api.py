@@ -9,6 +9,7 @@ def _build_app(monkeypatch):
     monkeypatch.setenv("UPLOADED_FILES_TOPIC", "uploadedfiles")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
     monkeypatch.setenv("UPLOAD_API_SIGNER_EMAIL", "")
+    monkeypatch.setenv("UPLOAD_API_KEY", "test-key")
 
     from google.cloud import pubsub_v1
     from google.cloud import storage
@@ -77,6 +78,7 @@ def test_presign_returns_signed_url(monkeypatch):
 
     resp = client.post(
         "/uploads/presign",
+        headers={"x-api-key": "test-key"},
         json={"filename": "test.csv", "contentType": "text/csv"},
     )
     assert resp.status_code == 200
@@ -92,10 +94,17 @@ def test_complete_publishes_message(monkeypatch):
     fake_publisher = uploads.publisher
     uploads.topic_path = fake_publisher.topic_path("test-project", "uploadedfiles")
 
-    resp = client.post("/uploads/complete", json={"filePath": "uploads/x.csv"})
+    resp = client.post(
+        "/uploads/complete",
+        headers={"x-api-key": "test-key"},
+        json={"filePath": "uploads/x.csv"},
+    )
     assert resp.status_code == 200
 
     assert len(fake_publisher.published) == 1
     topic_path, data = fake_publisher.published[0]
     assert topic_path == "projects/test-project/topics/uploadedfiles"
-    assert json.loads(data.decode("utf-8")) == {"bucket": "test-bucket"}
+    assert json.loads(data.decode("utf-8")) == {
+        "bucket": "test-bucket",
+        "name": "uploads/x.csv",
+    }

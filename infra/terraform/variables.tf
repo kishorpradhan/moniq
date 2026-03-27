@@ -32,6 +32,36 @@ variable "enable_worker" {
   default = false
 }
 
+variable "market_data_worker_image" {
+  type        = string
+  description = "Container image for the market data worker (e.g., gcr.io/PROJECT/market-data-worker:tag)"
+}
+
+variable "market_data_worker_name" {
+  type    = string
+  default = "moniq-market-data-worker"
+}
+
+variable "enable_market_data_worker" {
+  type    = bool
+  default = false
+}
+
+variable "market_data_worker_public" {
+  type    = bool
+  default = true
+}
+
+variable "alphavantage_secret_id" {
+  type    = string
+  default = "alphavantage-api-key"
+}
+
+variable "stockdata_secret_id" {
+  type    = string
+  default = "stockdata-api-key"
+}
+
 variable "upload_api_service_name" {
   type    = string
   default = "moniq-upload-api"
@@ -61,4 +91,55 @@ variable "upload_api_key" {
 variable "artifact_repo_name" {
   type    = string
   default = "moniq"
+}
+
+variable "db_instance_name" {
+  type    = string
+  default = "moniq-postgres"
+}
+
+variable "db_version" {
+  type    = string
+  default = "POSTGRES_15"
+}
+
+variable "db_tier" {
+  type    = string
+  default = "db-f1-micro"
+}
+
+variable "db_name" {
+  type    = string
+  default = "moniq_stocks"
+}
+
+variable "db_user_upload" {
+  type    = string
+  default = "moniq_upload"
+}
+
+variable "db_user_read" {
+  type    = string
+  default = "moniq_read"
+}
+
+variable "portfolio_api_image" {
+  type        = string
+  description = "Container image for the portfolio API (e.g., gcr.io/PROJECT/portfolio-api:tag)"
+  default     = ""
+}
+
+variable "portfolio_api_name" {
+  type    = string
+  default = "moniq-portfolio-api"
+}
+
+variable "enable_portfolio_api" {
+  type    = bool
+  default = false
+}
+
+variable "portfolio_api_public" {
+  type    = bool
+  default = true
 }

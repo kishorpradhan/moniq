@@ -21,3 +21,31 @@ output "cloud_run_service_url" {
 output "upload_api_url" {
   value = var.enable_upload_api ? google_cloud_run_v2_service.upload_api[0].uri : null
 }
+
+output "db_instance_connection_name" {
+  value = google_sql_database_instance.primary.connection_name
+}
+
+output "db_name" {
+  value = google_sql_database.primary.name
+}
+
+output "db_user_upload" {
+  value = google_sql_user.upload.name
+}
+
+output "db_user_read" {
+  value = google_sql_user.read.name
+}
+
+output "db_password_upload_secret" {
+  value = google_secret_manager_secret.db_password_upload.name
+}
+
+output "db_password_read_secret" {
+  value = google_secret_manager_secret.db_password_read.name
+}
+
+output "portfolio_api_url" {
+  value = var.enable_portfolio_api ? google_cloud_run_v2_service.portfolio_api[0].uri : null
+}

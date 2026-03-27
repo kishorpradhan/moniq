@@ -31,11 +31,92 @@ resource "google_project_service" "required" {
     "iam.googleapis.com",
     "cloudbuild.googleapis.com",
     "iamcredentials.googleapis.com",
-    "artifactregistry.googleapis.com"
+    "artifactregistry.googleapis.com",
+    "sqladmin.googleapis.com",
+    "secretmanager.googleapis.com"
   ])
 
   project = var.project_id
   service = each.value
+}
+
+resource "random_password" "db_password_upload" {
+  length  = 24
+  special = true
+}
+
+resource "random_password" "db_password_read" {
+  length  = 24
+  special = true
+}
+
+resource "google_secret_manager_secret" "db_password_upload" {
+  secret_id = "moniq-upload-db-password"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_secret_manager_secret_version" "db_password_upload" {
+  secret      = google_secret_manager_secret.db_password_upload.id
+  secret_data = random_password.db_password_upload.result
+}
+
+resource "google_secret_manager_secret" "db_password_read" {
+  secret_id = "moniq-read-db-password"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_secret_manager_secret_version" "db_password_read" {
+  secret      = google_secret_manager_secret.db_password_read.id
+  secret_data = random_password.db_password_read.result
+}
+
+resource "google_sql_database_instance" "primary" {
+  name             = var.db_instance_name
+  database_version = var.db_version
+  region           = var.region
+
+  settings {
+    tier = var.db_tier
+
+    ip_configuration {
+      ipv4_enabled = true
+    }
+
+    backup_configuration {
+      enabled = true
+    }
+  }
+
+  deletion_protection = false
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_sql_database" "primary" {
+  name     = var.db_name
+  instance = google_sql_database_instance.primary.name
+}
+
+resource "google_sql_user" "upload" {
+  name     = var.db_user_upload
+  instance = google_sql_database_instance.primary.name
+  password = random_password.db_password_upload.result
+}
+
+resource "google_sql_user" "read" {
+  name     = var.db_user_read
+  instance = google_sql_database_instance.primary.name
+  password = random_password.db_password_read.result
 }
 
 resource "google_artifact_registry_repository" "docker" {
@@ -102,14 +183,116 @@ resource "google_cloud_run_v2_service" "worker" {
   location = var.region
 
   template {
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.primary.connection_name
+    }
+
     service_account = google_service_account.worker.email
 
     containers {
       image = var.worker_image
+
+      env {
+        name  = "DB_USER"
+        value = var.db_user_upload
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = var.db_name
+      }
+
+      env {
+        name  = "INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password_upload.secret_id
+            version = "latest"
+          }
+        }
+      }
     }
   }
 
   depends_on = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_service" "market_data_worker" {
+  count    = var.enable_market_data_worker ? 1 : 0
+  name     = var.market_data_worker_name
+  location = var.region
+
+  template {
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.primary.connection_name
+    }
+
+    service_account = google_service_account.worker.email
+
+    containers {
+      image = var.market_data_worker_image
+
+      env {
+        name  = "DB_USER"
+        value = var.db_user_upload
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = var.db_name
+      }
+
+      env {
+        name  = "INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password_upload.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "ALPHAVANTAGE_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.alphavantage_secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name = "STOCKDATA_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = var.stockdata_secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "market_data_worker_public_invoker" {
+  count    = var.enable_market_data_worker && var.market_data_worker_public ? 1 : 0
+  location = google_cloud_run_v2_service.market_data_worker[0].location
+  name     = google_cloud_run_v2_service.market_data_worker[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
 
 resource "google_cloud_run_v2_service" "upload_api" {
@@ -191,6 +374,20 @@ resource "google_pubsub_subscription" "push" {
   }
 }
 
+resource "google_pubsub_subscription" "uploaded_files_push" {
+  count = var.enable_worker ? 1 : 0
+  name  = "uploaded-files-push"
+  topic = google_pubsub_topic.uploaded_files.name
+
+  push_config {
+    push_endpoint = "${google_cloud_run_v2_service.worker[0].uri}/pubsub"
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_invoker.email
+    }
+  }
+}
+
 resource "google_pubsub_topic_iam_member" "gcs_publisher" {
   topic  = google_pubsub_topic.gcs_events.name
   role   = "roles/pubsub.publisher"
@@ -217,14 +414,88 @@ resource "google_storage_bucket_iam_member" "upload_api_bucket_access" {
 }
 
 resource "google_project_iam_member" "worker_cloudsql" {
-  count   = var.enable_worker ? 1 : 0
+  count   = (var.enable_worker || var.enable_market_data_worker) ? 1 : 0
   project = var.project_id
   role    = "roles/cloudsql.client"
   member  = "serviceAccount:${google_service_account.worker.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "worker_db_password_access" {
+  count     = (var.enable_worker || var.enable_market_data_worker) ? 1 : 0
+  secret_id = google_secret_manager_secret.db_password_upload.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.worker.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "alphavantage_secret_access" {
+  count     = var.enable_market_data_worker ? 1 : 0
+  secret_id = var.alphavantage_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.worker.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "stockdata_secret_access" {
+  count     = var.enable_market_data_worker ? 1 : 0
+  secret_id = var.stockdata_secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.worker.email}"
 }
 
 resource "google_service_account_iam_member" "upload_api_token_creator" {
   service_account_id = google_service_account.upload_api.name
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.upload_api.email}"
+}
+
+resource "google_cloud_run_v2_service" "portfolio_api" {
+  count    = var.enable_portfolio_api ? 1 : 0
+  name     = var.portfolio_api_name
+  location = var.region
+
+  template {
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.primary.connection_name
+    }
+
+    service_account = google_service_account.worker.email
+
+    containers {
+      image = var.portfolio_api_image
+
+      env {
+        name  = "DB_USER"
+        value = var.db_user_upload
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = var.db_name
+      }
+
+      env {
+        name  = "INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password_upload.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "portfolio_api_public_invoker" {
+  count    = var.enable_portfolio_api && var.portfolio_api_public ? 1 : 0
+  location = google_cloud_run_v2_service.portfolio_api[0].location
+  name     = google_cloud_run_v2_service.portfolio_api[0].name
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
