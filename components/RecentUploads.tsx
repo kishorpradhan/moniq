@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { authFetch } from "@/lib/authFetch";
+
 export type UploadRun = {
   id: number;
   bucket: string;
@@ -60,6 +63,7 @@ function formatClientTime(value: string | null) {
 export default function RecentUploads() {
   const [data, setData] = useState<UploadRun[]>([]);
   const [polling, setPolling] = useState(false);
+  const { token } = useAuth();
 
   const hasPending = useMemo(
     () => data.some((run) => run.status === "started"),
@@ -71,7 +75,11 @@ export default function RecentUploads() {
 
     async function load() {
       try {
-        const res = await fetch("/api/uploads/recent?limit=10");
+        if (!token) return;
+        const res = await authFetch("/api/uploads/recent?limit=10", token);
+        if (!res.ok) {
+          throw new Error("Request failed");
+        }
         const payload = (await res.json()) as UploadsResponse;
         if (active) {
           setData(payload.uploads ?? []);
@@ -91,7 +99,7 @@ export default function RecentUploads() {
       clearInterval(timer);
       setPolling(false);
     };
-  }, []);
+  }, [token]);
 
   return (
     <section className="rounded-3xl bg-white p-8 shadow-sm">

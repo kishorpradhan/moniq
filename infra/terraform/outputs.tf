@@ -10,6 +10,10 @@ output "uploaded_files_topic" {
   value = google_pubsub_topic.uploaded_files.name
 }
 
+output "ingestion_completed_topic" {
+  value = google_pubsub_topic.ingestion_completed.name
+}
+
 output "upload_api_service_account" {
   value = google_service_account.upload_api.email
 }
@@ -48,4 +52,8 @@ output "db_password_read_secret" {
 
 output "portfolio_api_url" {
   value = var.enable_portfolio_api ? google_cloud_run_v2_service.portfolio_api[0].uri : null
+}
+
+output "metrics_worker_url" {
+  value = var.enable_metrics_worker ? google_cloud_run_v2_service.metrics_worker[0].uri : null
 }

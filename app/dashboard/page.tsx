@@ -1,6 +1,33 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+
 import Shell from "@/components/Shell";
 import PositionsList from "@/components/PositionsList";
-import { getAllocation, getSummary } from "@/lib/portfolio";
+import { useAuth } from "@/components/AuthProvider";
+import { authFetch } from "@/lib/authFetch";
+
+type SummaryResponse = {
+  asOfDate: string | null;
+  totalValue: number;
+  totalInvested: number;
+  unrealizedPl: number;
+  unrealizedPct: number | null;
+  realizedPl: number;
+};
+
+type AllocationTicker = {
+  ticker: string;
+  weight: number | null;
+  marketValue: number;
+};
+
+type AllocationSector = {
+  sector: string;
+  weight: number | null;
+  marketValue: number;
+};
 
 function formatMoney(value: number, digits = 0) {
   return value.toLocaleString("en-US", {
@@ -15,11 +42,71 @@ function formatPct(value: number | null, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-export default async function DashboardPage() {
-  const [summary, allocation] = await Promise.all([getSummary(), getAllocation()]);
+export default function DashboardPage() {
+  const router = useRouter();
+  const { token, user, loading } = useAuth();
+  const [summary, setSummary] = useState<SummaryResponse | null>(null);
+  const [allocation, setAllocation] = useState<{
+    tickers: AllocationTicker[];
+    sectors: AllocationSector[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const tickers = allocation.tickers.slice(0, 6);
-  const sectorSlice = allocation.sectors.slice(0, 4);
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push(`/login?next=/dashboard`);
+    }
+  }, [loading, user, router]);
+
+  useEffect(() => {
+    let active = true;
+    if (!token) return;
+    const loadJson = async <T,>(path: string): Promise<T> => {
+      const res = await authFetch(path, token);
+      if (!res.ok) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+      return (await res.json()) as T;
+    };
+
+    Promise.all([
+      loadJson<SummaryResponse>("/api/portfolio/summary"),
+      loadJson<{ tickers: AllocationTicker[]; sectors: AllocationSector[] }>("/api/portfolio/allocation"),
+    ])
+      .then(([summaryPayload, allocationPayload]) => {
+        if (active) {
+          setSummary(summaryPayload);
+          setAllocation(allocationPayload);
+        }
+      })
+      .catch(() => {
+        if (active) setError("Unable to load portfolio data.");
+      });
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const tickers = useMemo(() => allocation?.tickers.slice(0, 6) ?? [], [allocation]);
+  const sectorSlice = useMemo(() => allocation?.sectors.slice(0, 4) ?? [], [allocation]);
+
+  if (loading || !user) {
+    return (
+      <Shell>
+        <section className="rounded-3xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading portfolio…</section>
+      </Shell>
+    );
+  }
+
+  if (error || !summary || !allocation) {
+    return (
+      <Shell>
+        <section className="rounded-3xl bg-white p-8 text-sm text-rose-600 shadow-sm">
+          {error ?? "Unable to load portfolio."}
+        </section>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>

@@ -22,6 +22,11 @@ variable "uploaded_files_topic_name" {
   default = "uploadedfiles"
 }
 
+variable "ingestion_completed_topic_name" {
+  type    = string
+  default = "ingestion-completed"
+}
+
 variable "service_name" {
   type    = string
   default = "moniq-ingest-worker"
@@ -50,6 +55,21 @@ variable "enable_market_data_worker" {
 variable "market_data_worker_public" {
   type    = bool
   default = true
+}
+
+variable "metrics_worker_image" {
+  type        = string
+  description = "Container image for the metrics worker (e.g., gcr.io/PROJECT/metrics-worker:tag)"
+}
+
+variable "metrics_worker_name" {
+  type    = string
+  default = "moniq-metrics-worker"
+}
+
+variable "enable_metrics_worker" {
+  type    = bool
+  default = false
 }
 
 variable "alphavantage_secret_id" {
@@ -142,4 +162,9 @@ variable "enable_portfolio_api" {
 variable "portfolio_api_public" {
   type    = bool
   default = true
+}
+
+variable "firebase_project_id" {
+  type        = string
+  description = "Firebase project id for verifying Firebase Auth tokens."
 }

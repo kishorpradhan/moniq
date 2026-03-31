@@ -1,14 +1,25 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import Shell from "@/components/Shell";
 import RecentUploads from "@/components/RecentUploads";
+import { useAuth } from "@/components/AuthProvider";
+import { authFetch } from "@/lib/authFetch";
 
 export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
+  const { token, user, loading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push(`/login?next=/upload`);
+    }
+  }, [loading, user, router]);
 
   const onChooseFile = () => {
     fileInputRef.current?.click();
@@ -19,7 +30,7 @@ export default function UploadPage() {
     setStatus("Requesting upload link...");
 
     try {
-      const presignResp = await fetch("/api/uploads/presign", {
+      const presignResp = await authFetch("/api/uploads/presign", token, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filename: file.name, contentType: file.type || "text/csv" }),
@@ -46,7 +57,7 @@ export default function UploadPage() {
       }
 
       setStatus("Finalizing upload...");
-      const completeResp = await fetch("/api/uploads/complete", {
+      const completeResp = await authFetch("/api/uploads/complete", token, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ filePath }),

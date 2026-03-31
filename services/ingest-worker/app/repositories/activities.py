@@ -89,6 +89,31 @@ def batch_upsert(cur, rows, batch_size=1000):
     return total
 
 
+def get_distinct_account_ids_for_upload(cur, user_id: str, uploaded_file_name: str) -> list[str]:
+    cur.execute(
+        """
+        SELECT DISTINCT account_id
+        FROM activities
+        WHERE user_id = %s AND uploaded_file_name = %s AND account_id IS NOT NULL
+        """,
+        (user_id, uploaded_file_name),
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def get_max_activity_date_for_upload(cur, user_id: str, uploaded_file_name: str):
+    cur.execute(
+        """
+        SELECT MAX(activity_date)
+        FROM activities
+        WHERE user_id = %s AND uploaded_file_name = %s
+        """,
+        (user_id, uploaded_file_name),
+    )
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _coerce_value(value):
     if value is None:
         return None

@@ -6,6 +6,7 @@ def ensure_table(cur):
         """
         CREATE TABLE IF NOT EXISTS ingestion_runs (
             id BIGSERIAL PRIMARY KEY,
+            user_id TEXT,
             bucket TEXT NOT NULL,
             object_name TEXT NOT NULL,
             generation TEXT,
@@ -21,14 +22,14 @@ def ensure_table(cur):
     )
 
 
-def start_run(cur, bucket, object_name, generation):
+def start_run(cur, bucket, object_name, generation, user_id=None):
     cur.execute(
         """
-        INSERT INTO ingestion_runs (bucket, object_name, generation, status)
-        VALUES (%s, %s, %s, 'started')
+        INSERT INTO ingestion_runs (user_id, bucket, object_name, generation, status)
+        VALUES (%s, %s, %s, %s, 'started')
         RETURNING id
         """,
-        (bucket, object_name, generation),
+        (user_id, bucket, object_name, generation),
     )
     return cur.fetchone()[0]
 

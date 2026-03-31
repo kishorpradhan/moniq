@@ -10,6 +10,8 @@ def _build_app(monkeypatch):
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
     monkeypatch.setenv("UPLOAD_API_SIGNER_EMAIL", "")
     monkeypatch.setenv("UPLOAD_API_KEY", "test-key")
+    monkeypatch.setenv("AUTH_BYPASS", "true")
+    monkeypatch.setenv("AUTH_BYPASS_USER_ID", "test-user")
 
     from google.cloud import pubsub_v1
     from google.cloud import storage
@@ -107,4 +109,5 @@ def test_complete_publishes_message(monkeypatch):
     assert json.loads(data.decode("utf-8")) == {
         "bucket": "test-bucket",
         "name": "uploads/x.csv",
+        "user_id": "test-user",
     }

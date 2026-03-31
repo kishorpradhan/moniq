@@ -3,14 +3,16 @@ import os
 import re
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from google.cloud import pubsub_v1
 from google.auth import default as google_auth_default
 from google.auth import impersonated_credentials
 from google.auth.transport.requests import Request as GoogleAuthRequest
 
+from app.auth import require_user
 from app.config.storage import bucket, bucket_name
+from app.db import get_db_conn
 
 router = APIRouter()
 publisher = pubsub_v1.PublisherClient()
@@ -43,7 +45,13 @@ class CompleteRequest(BaseModel):
 
 
 @router.post("/presign", response_model=PresignResponse)
-def presign(payload: PresignRequest):
+def presign(payload: PresignRequest, request: Request):
+    conn = get_db_conn()
+    try:
+        require_user(request, conn)
+    finally:
+        conn.close()
+
     safe_name = sanitize_filename(payload.filename)
     file_path = f"uploads/{int(time.time() * 1000)}-{safe_name}"
 
@@ -79,7 +87,7 @@ def presign(payload: PresignRequest):
 
 
 @router.post("/complete")
-def complete(payload: CompleteRequest):
+def complete(payload: CompleteRequest, request: Request):
     if not payload.filePath:
         raise HTTPException(status_code=400, detail="filePath is required")
 
@@ -89,7 +97,15 @@ def complete(payload: CompleteRequest):
             detail="Missing Pub/Sub config (UPLOADED_FILES_TOPIC and GOOGLE_CLOUD_PROJECT)",
         )
 
-    message = json.dumps({"bucket": bucket_name, "name": payload.filePath}).encode("utf-8")
+    conn = get_db_conn()
+    try:
+        user = require_user(request, conn)
+    finally:
+        conn.close()
+
+    message = json.dumps(
+        {"bucket": bucket_name, "name": payload.filePath, "user_id": user["id"]}
+    ).encode("utf-8")
     publish_future = publisher.publish(topic_path, message)
     publish_future.result(timeout=5)
 

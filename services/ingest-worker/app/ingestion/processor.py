@@ -11,7 +11,9 @@ from app.repositories import activities as activities_repo
 logger = logging.getLogger("ingest-worker")
 
 
-def process_file(conn, bucket: str, name: str) -> Tuple[int, int, int, Optional[str]]:
+def process_file(
+    conn, bucket: str, name: str, user_id: str | None = None
+) -> Tuple[int, int, int, Optional[str]]:
     mapper = BrokerCsvV1Mapper()
     parsed_count = 0
     valid_rows: List[dict] = []
@@ -38,6 +40,8 @@ def process_file(conn, bucket: str, name: str) -> Tuple[int, int, int, Optional[
             mapped = mapper.map_row(row)
             if mapped:
                 mapped["uploaded_file_name"] = name
+                if user_id:
+                    mapped["user_id"] = user_id
             is_valid, errors = validate_activity(mapped)
             if not is_valid:
                 skipped += 1

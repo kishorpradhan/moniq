@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,14 @@ export async function POST(request: Request) {
   }
 
   const body = await request.text();
+  const incoming = headers();
+  const authHeader = incoming.get("authorization");
   const res = await fetch(new URL("/uploads/presign", baseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
+      ...(authHeader ? { Authorization: authHeader } : {}),
     },
     body,
   });

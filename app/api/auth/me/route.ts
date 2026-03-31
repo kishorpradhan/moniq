@@ -8,11 +8,12 @@ export async function GET() {
   if (!baseUrl) {
     return NextResponse.json({ error: "Missing PORTFOLIO_API_URL" }, { status: 500 });
   }
+
   const incoming = headers();
   const authHeader = incoming.get("authorization");
-  const res = await fetch(new URL("/portfolio/summary", baseUrl), {
-    cache: "no-store",
+  const res = await fetch(new URL("/auth/me", baseUrl), {
     headers: authHeader ? { Authorization: authHeader } : undefined,
+    cache: "no-store",
   });
   const body = await res.text();
   return new NextResponse(body, {

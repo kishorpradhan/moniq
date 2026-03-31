@@ -153,6 +153,11 @@ resource "google_pubsub_topic" "uploaded_files" {
   depends_on = [google_project_service.required]
 }
 
+resource "google_pubsub_topic" "ingestion_completed" {
+  name       = var.ingestion_completed_topic_name
+  depends_on = [google_project_service.required]
+}
+
 resource "google_storage_notification" "gcs_to_pubsub" {
   bucket         = google_storage_bucket.uploads.name
   topic          = google_pubsub_topic.gcs_events.id
@@ -205,6 +210,16 @@ resource "google_cloud_run_v2_service" "worker" {
       env {
         name  = "INSTANCE_CONNECTION_NAME"
         value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name  = "PROJECT_ID"
+        value = var.project_id
+      }
+
+      env {
+        name  = "INGESTION_COMPLETED_TOPIC"
+        value = google_pubsub_topic.ingestion_completed.name
       }
 
       env {
@@ -295,12 +310,69 @@ resource "google_cloud_run_v2_service_iam_member" "market_data_worker_public_inv
   member   = "allUsers"
 }
 
+resource "google_cloud_run_v2_service" "metrics_worker" {
+  count    = var.enable_metrics_worker ? 1 : 0
+  name     = var.metrics_worker_name
+  location = var.region
+
+  template {
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.primary.connection_name
+    }
+
+    service_account = google_service_account.worker.email
+
+    containers {
+      image = var.metrics_worker_image
+
+      env {
+        name  = "DB_USER"
+        value = var.db_user_upload
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = var.db_name
+      }
+
+      env {
+        name  = "INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password_upload.secret_id
+            version = "latest"
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [google_project_service.required]
+}
+
+resource "google_cloud_run_v2_service_iam_member" "metrics_worker_invoker" {
+  count    = var.enable_metrics_worker ? 1 : 0
+  location = google_cloud_run_v2_service.metrics_worker[0].location
+  name     = google_cloud_run_v2_service.metrics_worker[0].name
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.pubsub_invoker.email}"
+}
+
 resource "google_cloud_run_v2_service" "upload_api" {
   count    = var.enable_upload_api ? 1 : 0
   name     = var.upload_api_service_name
   location = var.region
 
   template {
+    annotations = {
+      "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.primary.connection_name
+    }
+
     service_account = google_service_account.upload_api.email
 
     containers {
@@ -329,6 +401,36 @@ resource "google_cloud_run_v2_service" "upload_api" {
       env {
         name  = "GOOGLE_CLOUD_PROJECT"
         value = var.project_id
+      }
+
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.firebase_project_id
+      }
+
+      env {
+        name  = "DB_USER"
+        value = var.db_user_upload
+      }
+
+      env {
+        name  = "DB_NAME"
+        value = var.db_name
+      }
+
+      env {
+        name  = "INSTANCE_CONNECTION_NAME"
+        value = google_sql_database_instance.primary.connection_name
+      }
+
+      env {
+        name = "DB_PASSWORD"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.db_password_upload.secret_id
+            version = "latest"
+          }
+        }
       }
     }
   }
@@ -388,6 +490,20 @@ resource "google_pubsub_subscription" "uploaded_files_push" {
   }
 }
 
+resource "google_pubsub_subscription" "ingestion_completed_push" {
+  count = var.enable_metrics_worker ? 1 : 0
+  name  = "ingestion-completed-push"
+  topic = google_pubsub_topic.ingestion_completed.name
+
+  push_config {
+    push_endpoint = "${google_cloud_run_v2_service.metrics_worker[0].uri}/pubsub/ingestion-complete"
+
+    oidc_token {
+      service_account_email = google_service_account.pubsub_invoker.email
+    }
+  }
+}
+
 resource "google_pubsub_topic_iam_member" "gcs_publisher" {
   topic  = google_pubsub_topic.gcs_events.name
   role   = "roles/pubsub.publisher"
@@ -398,6 +514,12 @@ resource "google_pubsub_topic_iam_member" "upload_api_publisher" {
   topic  = google_pubsub_topic.uploaded_files.name
   role   = "roles/pubsub.publisher"
   member = "serviceAccount:${google_service_account.upload_api.email}"
+}
+
+resource "google_pubsub_topic_iam_member" "ingest_worker_publisher" {
+  topic  = google_pubsub_topic.ingestion_completed.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${google_service_account.worker.email}"
 }
 
 resource "google_storage_bucket_iam_member" "worker_bucket_access" {
@@ -420,6 +542,13 @@ resource "google_project_iam_member" "worker_cloudsql" {
   member  = "serviceAccount:${google_service_account.worker.email}"
 }
 
+resource "google_project_iam_member" "upload_api_cloudsql" {
+  count   = var.enable_upload_api ? 1 : 0
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.upload_api.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "worker_db_password_access" {
   count     = (var.enable_worker || var.enable_market_data_worker) ? 1 : 0
   secret_id = google_secret_manager_secret.db_password_upload.id
@@ -439,6 +568,13 @@ resource "google_secret_manager_secret_iam_member" "stockdata_secret_access" {
   secret_id = var.stockdata_secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.worker.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "upload_api_db_password_access" {
+  count     = var.enable_upload_api ? 1 : 0
+  secret_id = google_secret_manager_secret.db_password_upload.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.upload_api.email}"
 }
 
 resource "google_service_account_iam_member" "upload_api_token_creator" {
@@ -485,6 +621,11 @@ resource "google_cloud_run_v2_service" "portfolio_api" {
             version = "latest"
           }
         }
+      }
+
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = var.firebase_project_id
       }
     }
   }

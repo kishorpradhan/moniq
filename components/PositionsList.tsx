@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { useAuth } from "@/components/AuthProvider";
+import { authFetch } from "@/lib/authFetch";
+
 type OpenRow = {
   ticker: string;
   quantity: number;
@@ -42,11 +45,18 @@ function formatPct(value: number | null, digits = 1) {
 export default function PositionsList() {
   const [data, setData] = useState<PositionsResponse | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const { token } = useAuth();
 
   useEffect(() => {
     let active = true;
-    fetch("/api/portfolio/positions")
-      .then((res) => res.json())
+    if (!token) return;
+    authFetch("/api/portfolio/positions", token)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error("Request failed");
+        }
+        return res.json();
+      })
       .then((payload: PositionsResponse) => {
         if (active) {
           setData(payload);

@@ -40,3 +40,16 @@ uvicorn app.main:app --reload --port 8081
 
 ## Notes
 - Vercel ignores `services/` via `.vercelignore`.
+
+## Auth (Firebase Google Sign-In)
+Client env vars (Next.js):
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+
+Server env vars (Cloud Run):
+- `FIREBASE_PROJECT_ID` (portfolio-api + upload-api)
+
+Beta allowlist:
+- Add allowed emails to `beta_users` table (lowercase).

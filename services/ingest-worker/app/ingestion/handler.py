@@ -4,7 +4,9 @@ import logging
 
 from fastapi import HTTPException
 
+from app.ingestion.publisher import publish_ingestion_completed
 from app.ingestion.processor import process_file
+from app.repositories import activities as activities_repo
 from app.repositories import ingestion_runs as runs_repo
 
 
@@ -29,6 +31,7 @@ async def handle_pubsub(request, conn):
     bucket = payload.get("bucket")
     name = payload.get("name")
     generation = payload.get("generation")
+    user_id = payload.get("user_id")
 
     if not bucket or not name:
         raise HTTPException(status_code=400, detail="Missing bucket or name")
@@ -41,11 +44,11 @@ async def handle_pubsub(request, conn):
     with conn:
         with conn.cursor() as cur:
             runs_repo.ensure_table(cur)
-            run_id = runs_repo.start_run(cur, bucket, name, generation)
+            run_id = runs_repo.start_run(cur, bucket, name, generation, user_id)
 
         try:
             parsed_count, inserted_count, skipped_count, error_code = process_file(
-                conn, bucket, name
+                conn, bucket, name, user_id
             )
             error = {"code": error_code} if error_code else None
             if error_code:
@@ -89,5 +92,38 @@ async def handle_pubsub(request, conn):
             "skipped": skipped_count,
         },
     )
+
+    if status in ("success", "partial") and inserted_count > 0 and user_id:
+        with conn.cursor() as cur:
+            account_ids = activities_repo.get_distinct_account_ids_for_upload(
+                cur, user_id, name
+            )
+            max_date = activities_repo.get_max_activity_date_for_upload(
+                cur, user_id, name
+            )
+
+        events = []
+        for account_id in account_ids:
+            events.append(
+                {
+                    "user_id": user_id,
+                    "account_id": account_id,
+                    "ingestion_run_id": str(run_id),
+                    "object_name": name,
+                    "status": status,
+                    "inserted_count": inserted_count,
+                    "as_of_date": max_date.isoformat() if max_date else None,
+                }
+            )
+        published = publish_ingestion_completed(events)
+        logger.info(
+            "ingestion_complete_published",
+            extra={
+                "bucket": bucket,
+                "object_name": name,
+                "events": len(events),
+                "published": published,
+            },
+        )
 
     return {"ok": True}

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 
-def fetch_summary(cur) -> Dict[str, object]:
+def fetch_summary(cur, user_id: str) -> Dict[str, object]:
     cur.execute(
         """
         SELECT
@@ -12,7 +12,9 @@ def fetch_summary(cur) -> Dict[str, object]:
             COALESCE(SUM(cost_basis), 0) AS total_invested,
             COALESCE(SUM(unrealized_pl), 0) AS unrealized_pl
         FROM positions_metrics_open
-        """
+        WHERE user_id = %s
+        """,
+        (user_id,),
     )
     open_row = cur.fetchone() or {}
 
@@ -22,7 +24,9 @@ def fetch_summary(cur) -> Dict[str, object]:
             MAX(as_of_date) AS as_of_date,
             COALESCE(SUM(realized_pl), 0) AS realized_pl
         FROM positions_metrics_closed
-        """
+        WHERE user_id = %s
+        """,
+        (user_id,),
     )
     closed_row = cur.fetchone() or {}
 
@@ -41,15 +45,17 @@ def fetch_summary(cur) -> Dict[str, object]:
     }
 
 
-def fetch_allocation(cur) -> Dict[str, List[Dict[str, object]]]:
+def fetch_allocation(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
     cur.execute(
         """
         SELECT ticker,
                COALESCE(market_value, 0) AS market_value,
                contribution_pct
         FROM positions_metrics_open
+        WHERE user_id = %s
         ORDER BY market_value DESC NULLS LAST
-        """
+        """,
+        (user_id,),
     )
     tickers = [
         {
@@ -66,8 +72,10 @@ def fetch_allocation(cur) -> Dict[str, List[Dict[str, object]]]:
                COALESCE(market_value, 0) AS market_value,
                contribution_pct
         FROM portfolio_sector_allocations
+        WHERE user_id = %s
         ORDER BY market_value DESC NULLS LAST
-        """
+        """,
+        (user_id,),
     )
     sectors = [
         {
@@ -81,7 +89,7 @@ def fetch_allocation(cur) -> Dict[str, List[Dict[str, object]]]:
     return {"tickers": tickers, "sectors": sectors}
 
 
-def fetch_positions(cur) -> Dict[str, List[Dict[str, object]]]:
+def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
     cur.execute(
         """
         SELECT
@@ -96,8 +104,10 @@ def fetch_positions(cur) -> Dict[str, List[Dict[str, object]]]:
             xirr,
             contribution_pct
         FROM positions_metrics_open
+        WHERE user_id = %s
         ORDER BY market_value DESC NULLS LAST
-        """
+        """,
+        (user_id,),
     )
     open_rows = [
         {
@@ -126,8 +136,10 @@ def fetch_positions(cur) -> Dict[str, List[Dict[str, object]]]:
             realized_pl,
             return_pct
         FROM positions_metrics_closed
+        WHERE user_id = %s
         ORDER BY realized_pl DESC NULLS LAST
-        """
+        """,
+        (user_id,),
     )
     closed_rows = [
         {
@@ -145,7 +157,7 @@ def fetch_positions(cur) -> Dict[str, List[Dict[str, object]]]:
     return {"open": open_rows, "closed": closed_rows}
 
 
-def fetch_recent_uploads(cur, limit: int = 10) -> List[Dict[str, object]]:
+def fetch_recent_uploads(cur, user_id: str, limit: int = 10) -> List[Dict[str, object]]:
     cur.execute(
         """
         SELECT
@@ -172,12 +184,13 @@ def fetch_recent_uploads(cur, limit: int = 10) -> List[Dict[str, object]]:
                 skipped_count,
                 error
             FROM ingestion_runs
+            WHERE user_id = %s
             ORDER BY object_name, started_at DESC
         ) latest
         ORDER BY started_at DESC
         LIMIT %s
         """,
-        (limit,),
+        (user_id, limit),
     )
     rows = cur.fetchall()
     return [

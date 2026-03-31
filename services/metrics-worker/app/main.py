@@ -4,6 +4,7 @@ from datetime import date, datetime
 from fastapi import FastAPI, Request
 
 from app.db import get_db_conn
+from app.ingestion.pubsub_handler import handle_ingestion_complete
 from app.metrics.portfolio_metrics import recompute_all, recompute_for_account
 
 
@@ -37,5 +38,14 @@ async def recompute_metrics(request: Request):
         else:
             inserted = recompute_all(conn, as_of_date)
         return {"ok": True, "rows_written": inserted, "as_of_date": as_of_date.isoformat()}
+    finally:
+        conn.close()
+
+
+@app.post("/pubsub/ingestion-complete")
+async def ingestion_complete(request: Request):
+    conn = get_db_conn()
+    try:
+        return await handle_ingestion_complete(request, conn)
     finally:
         conn.close()
