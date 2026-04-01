@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
+from uuid import uuid4
 
 from .base import BaseMapper
 
@@ -38,12 +38,8 @@ class BrokerCsvV1Mapper(BaseMapper):
         activity_date = row.get("created_at")
         status = row.get("state")
 
-        activity_id = None
-        if external_id:
-            try:
-                activity_id = UUID(external_id)
-            except ValueError:
-                activity_id = None
+        # Always generate a new internal id to avoid cross-user collisions.
+        activity_id = uuid4()
 
         mapped = {
             "id": activity_id,

@@ -29,7 +29,7 @@ def ensure_table(cur):
 
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
-            UNIQUE (account_id, external_transaction_id)
+            UNIQUE (user_id, external_transaction_id)
         )
         """
     )
@@ -64,7 +64,7 @@ def batch_upsert(cur, rows, batch_size=1000):
 
     insert_sql = f"""
         INSERT INTO activities ({", ".join(columns)}) VALUES %s
-        ON CONFLICT (id) DO UPDATE SET
+        ON CONFLICT (user_id, external_transaction_id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
             account_id = EXCLUDED.account_id,
             source_id = EXCLUDED.source_id,
