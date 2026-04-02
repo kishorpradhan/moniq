@@ -10,6 +10,7 @@ const links = [
   { href: "/dashboard", label: "Dashboard", public: false },
   { href: "/upload", label: "Upload", public: false },
   { href: "/analysis", label: "Analysis", public: false },
+  { href: "/chat", label: "Chat", public: false },
 ];
 
 export default function Sidebar() {

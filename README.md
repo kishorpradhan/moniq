@@ -51,5 +51,8 @@ Client env vars (Next.js):
 Server env vars (Cloud Run):
 - `FIREBASE_PROJECT_ID` (portfolio-api + upload-api)
 
+Chat service env vars (Next.js server):
+- `CHAT_AGENT_URL` (e.g., https://portfolio-chat-agent-xxxx.a.run.app)
+
 Beta allowlist:
 - Add allowed emails to `beta_users` table (lowercase).
