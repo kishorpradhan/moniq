@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import Shell from "@/components/Shell";
+import { useAuth } from "@/components/AuthProvider";
 
 interface Message {
   id: string;
@@ -78,6 +79,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const { token, user, loading } = useAuth();
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
@@ -90,6 +92,10 @@ export default function ChatPage() {
 
   const handleSend = async () => {
     if (!canSend || isSending) return;
+    if (!token) {
+      setError("You must be signed in to ask a question.");
+      return;
+    }
     const question = input.trim();
     const assistantId = makeId();
     setError(null);
@@ -108,7 +114,10 @@ export default function ChatPage() {
     try {
       const response = await fetch("/api/chat/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ question, conversation_id: conversationId }),
       });
       if (!response.ok) {
@@ -169,6 +178,18 @@ export default function ChatPage() {
           </div>
 
           <div className="border-t border-slate-100 p-5">
+            <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-700">Debug</div>
+              <div className="mt-1">
+                Auth status:{" "}
+                {loading
+                  ? "loading"
+                  : user
+                  ? `signed in (${user.email ?? "unknown"})`
+                  : "not signed in"}
+              </div>
+              <div className="mt-1">Token: {token ? "present" : "missing"}</div>
+            </div>
             {error ? (
               <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-600">
                 {error}

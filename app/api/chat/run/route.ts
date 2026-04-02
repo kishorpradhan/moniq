@@ -10,6 +10,7 @@ export async function POST(request: Request) {
   }
 
   let payload: { question?: string } = {};
+  const authHeader = request.headers.get("authorization");
   try {
     payload = (await request.json()) as { question?: string };
   } catch {
@@ -22,7 +23,10 @@ export async function POST(request: Request) {
 
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/run`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(authHeader ? { Authorization: authHeader } : {}),
+    },
     body: JSON.stringify({ question: payload.question }),
   });
 

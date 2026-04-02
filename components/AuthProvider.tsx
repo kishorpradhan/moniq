@@ -4,7 +4,7 @@ import {
   GoogleAuthProvider,
   User,
   getAuth,
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const app = getFirebaseApp();
     const auth = getAuth(app);
-    return onAuthStateChanged(auth, async (nextUser) => {
+    return onIdTokenChanged(auth, async (nextUser) => {
       setUser(nextUser);
       if (nextUser) {
         const idToken = await nextUser.getIdToken();
