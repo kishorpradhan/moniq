@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     );
   }
 
-  let payload: { question?: string } = {};
+  let payload: { question?: string; conversation_id?: string | null; user_id?: string | null } = {};
   const authHeader = request.headers.get("authorization");
   try {
     payload = (await request.json()) as { question?: string };
@@ -27,7 +27,11 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
       ...(authHeader ? { Authorization: authHeader } : {}),
     },
-    body: JSON.stringify({ question: payload.question }),
+    body: JSON.stringify({
+      question: payload.question,
+      conversation_id: payload.conversation_id ?? null,
+      user_id: payload.user_id ?? null,
+    }),
   });
 
   const contentType = response.headers.get("content-type") ?? "application/json";

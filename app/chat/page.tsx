@@ -79,7 +79,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const { token, user, loading } = useAuth();
+  const { token, user, userId, loading } = useAuth();
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
 
@@ -118,7 +118,7 @@ export default function ChatPage() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ question, conversation_id: conversationId }),
+        body: JSON.stringify({ question, conversation_id: conversationId, user_id: userId }),
       });
       if (!response.ok) {
         const text = await response.text();
