@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Shell from "@/components/Shell";
 import { useAuth } from "@/components/AuthProvider";
@@ -27,6 +27,14 @@ interface ChatRunResponse {
     }>;
     tickers: string[];
   };
+}
+
+interface ChatHistoryResponse {
+  conversation_id: string;
+  messages: Array<{
+    role: "user" | "assistant";
+    content: string;
+  }>;
 }
 
 const starterPrompts = [
@@ -61,6 +69,8 @@ const pipelineSteps = [
     description: "Writes the final response.",
   },
 ];
+
+const HISTORY_STORAGE_KEY = "moniq_chat_conversation_id";
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
@@ -127,6 +137,9 @@ export default function ChatPage() {
       const payload = (await response.json()) as ChatRunResponse;
       if (payload.conversation_id) {
         setConversationId(payload.conversation_id);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(HISTORY_STORAGE_KEY, payload.conversation_id);
+        }
       }
       setMessages((prev) =>
         prev.map((message) =>
@@ -149,6 +162,47 @@ export default function ChatPage() {
       setIsSending(false);
     }
   };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (stored) {
+      setConversationId(stored);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!conversationId || !token) return;
+    let cancelled = false;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch("/api/chat/history", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ conversation_id: conversationId, user_id: userId }),
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as ChatHistoryResponse;
+        if (!payload.messages?.length || cancelled) return;
+        setMessages(
+          payload.messages.map((message) => ({
+            id: makeId(),
+            role: message.role,
+            content: message.content,
+          }))
+        );
+      } catch {
+        // Ignore history load errors for now.
+      }
+    };
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, token, userId]);
 
   return (
     <Shell>
@@ -189,6 +243,9 @@ export default function ChatPage() {
                   : "not signed in"}
               </div>
               <div className="mt-1">Token: {token ? "present" : "missing"}</div>
+              <div className="mt-1">
+                Conversation: {conversationId ? conversationId : "not started"}
+              </div>
             </div>
             {error ? (
               <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-600">
