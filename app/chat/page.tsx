@@ -9,7 +9,6 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  debug?: Record<string, unknown> | null;
 }
 
 interface ChatRunResponse {
@@ -91,6 +90,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [lastDebug, setLastDebug] = useState<Record<string, unknown> | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const { token, user, userId, loading } = useAuth();
 
@@ -147,10 +147,13 @@ export default function ChatPage() {
       setMessages((prev) =>
         prev.map((message) =>
           message.id === assistantId
-            ? { ...message, content: formatPlan(payload), debug: payload.debug ?? null }
+            ? { ...message, content: formatPlan(payload) }
             : message
         )
       );
+      if (payload.debug) {
+        setLastDebug(payload.debug);
+      }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unable to reach chat service.";
       setError("Unable to reach chat service.");
@@ -221,21 +224,15 @@ export default function ChatPage() {
         <div className="flex h-[70vh] flex-col rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex-1 space-y-4 overflow-y-auto p-6">
             {messages.map((message) => (
-              <div key={message.id} className="space-y-2">
-                <div
-                  className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
-                    message.role === "user"
-                      ? "ml-auto bg-slate-900 text-white"
-                      : "bg-slate-100 text-slate-700"
-                  }`}
-                >
-                  {message.content}
-                </div>
-                {showDebug && message.role === "assistant" && message.debug ? (
-                  <pre className="max-w-[85%] overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-sm">
-                    {JSON.stringify(message.debug, null, 2)}
-                  </pre>
-                ) : null}
+              <div
+                key={message.id}
+                className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                  message.role === "user"
+                    ? "ml-auto bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {message.content}
               </div>
             ))}
           </div>
@@ -255,13 +252,6 @@ export default function ChatPage() {
               <div className="mt-1">
                 Conversation: {conversationId ? conversationId : "not started"}
               </div>
-              <button
-                type="button"
-                onClick={() => setShowDebug((prev) => !prev)}
-                className="mt-3 rounded-full border border-slate-200 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500 hover:border-slate-300 hover:text-slate-700"
-              >
-                {showDebug ? "Hide Debug" : "Show Debug"}
-              </button>
             </div>
             {error ? (
               <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-600">
@@ -312,27 +302,85 @@ export default function ChatPage() {
         </div>
 
         <aside className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Chat graph steps</h2>
-            <p className="mt-2 text-xs text-slate-500">
-              This is the planned pipeline for each question.
-            </p>
-            <div className="mt-4 space-y-3">
-              {pipelineSteps.map((step, index) => (
-                <div key={step.name} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Step {index + 1}</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{step.name}</div>
-                  <div className="mt-1 text-xs text-slate-500">{step.description}</div>
+          <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+              <div className="flex gap-6 text-sm font-semibold">
+                <span className="text-slate-900">Steps</span>
+                <button
+                  type="button"
+                  onClick={() => setShowDebug((prev) => !prev)}
+                  className={`text-slate-400 hover:text-slate-700 ${
+                    showDebug ? "text-slate-700" : ""
+                  }`}
+                >
+                  Debug
+                </button>
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500"
+              >
+                •••
+              </button>
+            </div>
+            <div className="space-y-4 px-6 py-5">
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                {lastDebug?.intent
+                  ? `Finance • ${Math.round(
+                      ((lastDebug.intent as { confidence?: number })?.confidence ?? 0) * 100
+                    )}% confidence`
+                  : "Awaiting intent"}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 rounded-2xl bg-slate-50 p-4 text-center text-xs text-slate-500">
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    {pipelineSteps.length}
+                  </div>
+                  steps run
                 </div>
-              ))}
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">--</div>
+                  total time
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-slate-900">
+                    {lastDebug?.plan
+                      ? (lastDebug.plan as { compute_mode?: string }).compute_mode ?? "n/a"
+                      : "n/a"}
+                  </div>
+                  compute
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {pipelineSteps.map((step) => (
+                  <div key={step.name} className="flex items-start gap-3">
+                    <div className="mt-1 h-6 w-6 rounded-full bg-emerald-100 text-center text-xs font-semibold leading-6 text-emerald-700">
+                      ✓
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{step.name}</p>
+                      <p className="text-xs text-slate-500">{step.description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">Backend status</h2>
-            <p className="mt-2 text-xs text-slate-500">
-              Graph execution is not connected yet. Once wired, this panel will show live node updates.
-            </p>
+            <h2 className="text-sm font-semibold text-slate-900">Debug JSON</h2>
+            {showDebug ? (
+              <pre className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
+                {JSON.stringify(lastDebug ?? {}, null, 2)}
+              </pre>
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">
+                Toggle Debug to view raw agent output.
+              </p>
+            )}
           </div>
         </aside>
       </section>
