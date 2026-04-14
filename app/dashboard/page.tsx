@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-
 import Shell from "@/components/Shell";
 import PositionsList from "@/components/PositionsList";
 import { useAuth } from "@/components/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
+import LockedState from "@/components/LockedState";
 
 type SummaryResponse = {
   asOfDate: string | null;
@@ -43,7 +42,6 @@ function formatPct(value: number | null, digits = 1) {
 }
 
 export default function DashboardPage() {
-  const router = useRouter();
   const { token, user, loading } = useAuth();
   const [summary, setSummary] = useState<SummaryResponse | null>(null);
   const [allocation, setAllocation] = useState<{
@@ -51,12 +49,6 @@ export default function DashboardPage() {
     sectors: AllocationSector[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push(`/login?next=/dashboard`);
-    }
-  }, [loading, user, router]);
 
   useEffect(() => {
     let active = true;
@@ -90,10 +82,18 @@ export default function DashboardPage() {
   const tickers = useMemo(() => allocation?.tickers.slice(0, 6) ?? [], [allocation]);
   const sectorSlice = useMemo(() => allocation?.sectors.slice(0, 4) ?? [], [allocation]);
 
-  if (loading || !user) {
+  if (loading) {
     return (
       <Shell>
         <section className="rounded-3xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading portfolio…</section>
+      </Shell>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Shell>
+        <LockedState />
       </Shell>
     );
   }

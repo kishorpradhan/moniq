@@ -5,11 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/AuthProvider";
 
-const links = [
+const publicLinks = [
   { href: "/", label: "Home", public: true },
+  { href: "/about", label: "About", public: true },
+];
+
+const productLinks = [
   { href: "/dashboard", label: "Dashboard", public: false },
   { href: "/upload", label: "Upload", public: false },
-  { href: "/analysis", label: "Analysis", public: false },
   { href: "/chat", label: "Chat", public: false },
 ];
 
@@ -30,38 +33,43 @@ export default function Sidebar() {
         </div>
       ) : null}
 
-      <nav className="space-y-2">
-        {links.map((link) => {
-          const isActive = pathname === link.href;
-          const locked = !link.public && !isAuthed;
-          const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
-            isActive
-              ? "bg-slate-100 text-slate-900 shadow"
-              : locked
-              ? "text-slate-400 hover:bg-slate-50"
-              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-          }`;
-
-          if (locked) {
+      <nav className="space-y-4">
+        <div className="space-y-2">
+          {publicLinks.map((link) => {
+            const isActive = pathname === link.href;
+            const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
+              isActive
+                ? "bg-slate-100 text-slate-900 shadow"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`;
             return (
-              <button
-                key={link.href}
-                type="button"
-                className={className}
-                onClick={() => router.push(`/login?next=${encodeURIComponent(link.href)}`)}
-              >
+              <Link key={link.href} href={link.href} className={className}>
                 <span>{link.label}</span>
-                <span className="text-xs">🔒</span>
-              </button>
+              </Link>
             );
-          }
+          })}
+        </div>
 
-          return (
-            <Link key={link.href} href={link.href} className={className}>
-              <span>{link.label}</span>
-            </Link>
-          );
-        })}
+        <div className="space-y-2">
+          {productLinks.map((link) => {
+            const isActive = pathname === link.href;
+            const locked = !isAuthed;
+            const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
+              isActive
+                ? "bg-slate-100 text-slate-900 shadow"
+                : locked
+                ? "text-slate-400 hover:bg-slate-50"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`;
+
+            return (
+              <Link key={link.href} href={link.href} className={className}>
+                <span>{link.label}</span>
+                {locked ? <span className="text-xs">🔒</span> : null}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       <div className="mt-10 space-y-2">
@@ -70,16 +78,16 @@ export default function Sidebar() {
             <button
               className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-white"
               type="button"
-              onClick={() => router.push("/login")}
+              onClick={() => router.push("/request-access")}
             >
-              Get started
+              Request access
             </button>
             <button
               className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"
               type="button"
               onClick={() => router.push("/login")}
             >
-              Sign in
+              Login
             </button>
           </>
         ) : (

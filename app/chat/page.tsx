@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Shell from "@/components/Shell";
 import { useAuth } from "@/components/AuthProvider";
+import LockedState from "@/components/LockedState";
 
 interface Message {
   id: string;
@@ -90,6 +91,7 @@ export default function ChatPage() {
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [lastDebug, setLastDebug] = useState<Record<string, unknown> | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const { token, user, userId, loading } = useAuth();
@@ -210,17 +212,49 @@ export default function ChatPage() {
     };
   }, [conversationId, token, userId]);
 
+  if (loading) {
+    return (
+      <Shell>
+        <section className="rounded-3xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading chat…</section>
+      </Shell>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Shell>
+        <LockedState />
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
       <header className="rounded-3xl bg-white p-8 shadow-sm">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Portfolio chat</p>
-        <h1 className="font-display text-3xl text-slate-900">Ask your portfolio anything</h1>
-        <p className="text-sm text-slate-500">
-          This is a mock chat screen to validate the flow. We will wire the graph next.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Portfolio chat</p>
+            <h1 className="font-display text-3xl text-slate-900">Ask Moniq about your portfolio.</h1>
+            <div className="mt-3 text-sm text-slate-500">
+              <p className="font-semibold text-slate-600">Examples:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                <li>What are my top 5 positions?</li>
+                <li>How diversified is my portfolio?</li>
+                <li>Which stocks contribute most to my returns?</li>
+              </ul>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowSidebar((prev) => !prev)}
+            className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
+          >
+            {showSidebar ? "Hide debug" : "Show debug"}
+          </button>
+        </div>
       </header>
 
-      <section className="grid gap-6 lg:grid-cols-[2fr_1fr]">
+      <section className={`grid gap-6 ${showSidebar ? "lg:grid-cols-[2fr_1fr]" : ""}`}>
         <div className="flex h-[70vh] flex-col rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex-1 space-y-4 overflow-y-auto p-6">
             {messages.map((message) => (
@@ -238,21 +272,6 @@ export default function ChatPage() {
           </div>
 
           <div className="border-t border-slate-100 p-5">
-            <div className="mb-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-              <div className="font-semibold text-slate-700">Debug</div>
-              <div className="mt-1">
-                Auth status:{" "}
-                {loading
-                  ? "loading"
-                  : user
-                  ? `signed in (${user.email ?? "unknown"})`
-                  : "not signed in"}
-              </div>
-              <div className="mt-1">Token: {token ? "present" : "missing"}</div>
-              <div className="mt-1">
-                Conversation: {conversationId ? conversationId : "not started"}
-              </div>
-            </div>
             {error ? (
               <div className="mb-3 rounded-2xl border border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-600">
                 {error}
@@ -301,7 +320,26 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {showSidebar ? (
         <aside className="space-y-4">
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">Debug status</h2>
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-700">Auth</div>
+              <div className="mt-1">
+                Status:{" "}
+                {loading
+                  ? "loading"
+                  : user
+                  ? `signed in (${user.email ?? "unknown"})`
+                  : "not signed in"}
+              </div>
+              <div className="mt-1">Token: {token ? "present" : "missing"}</div>
+              <div className="mt-1">
+                Conversation: {conversationId ? conversationId : "not started"}
+              </div>
+            </div>
+          </div>
           <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
               <div className="flex gap-6 text-sm font-semibold">
@@ -383,6 +421,7 @@ export default function ChatPage() {
             )}
           </div>
         </aside>
+        ) : null}
       </section>
     </Shell>
   );

@@ -1,25 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-
 import Shell from "@/components/Shell";
 import RecentUploads from "@/components/RecentUploads";
 import { useAuth } from "@/components/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
+import LockedState from "@/components/LockedState";
 
 export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
   const { token, user, loading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push(`/login?next=/upload`);
-    }
-  }, [loading, user, router]);
 
   const onChooseFile = () => {
     fileInputRef.current?.click();
@@ -74,6 +66,22 @@ export default function UploadPage() {
       setIsUploading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <Shell>
+        <section className="rounded-2xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading uploads…</section>
+      </Shell>
+    );
+  }
+
+  if (!user) {
+    return (
+      <Shell>
+        <LockedState />
+      </Shell>
+    );
+  }
 
   return (
     <Shell>
