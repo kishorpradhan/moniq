@@ -52,16 +52,22 @@ export default function HomePage() {
             title="Upload Portfolio"
             caption="Upload a portfolio using CSV or manual entry."
             placeholderLabel="Upload"
+            imageSrc="/previews/Upload.png"
+            imageAlt="Upload portfolio preview"
           />
           <ScreenshotPreviewCard
             title="Ask Questions"
             caption="Ask questions about your investments in plain English."
             placeholderLabel="Questions"
+            imageSrc="/previews/Chat.png"
+            imageAlt="Ask questions preview"
           />
           <ScreenshotPreviewCard
             title="Portfolio Dashboard"
             caption="View portfolio performance, allocation, and trends in one place."
             placeholderLabel="Dashboard"
+            imageSrc="/previews/Dashboard.png"
+            imageAlt="Portfolio dashboard preview"
           />
         </div>
       </section>

@@ -40,6 +40,8 @@ uvicorn app.main:app --reload --port 8081
 
 ## Notes
 - Vercel ignores `services/` via `.vercelignore`.
+- Static frontend assets live in `public/` and landing page screenshots live in `public/previews/`.
+- `PUBLIC_README.md` is the shareable product and architecture overview for external audiences.
 
 ## Auth (Firebase Google Sign-In)
 Client env vars (Next.js):

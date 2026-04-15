@@ -7,14 +7,23 @@ import Shell from "@/components/Shell";
 
 export default function RequestAccessPage() {
   const [gmail, setGmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!gmail.trim()) return;
-    const subject = "Moniq Beta Access Request";
-    const body = `Gmail: ${gmail.trim()}\n\nNotes:`;
-    const href = `mailto:kishor.pradhan@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.location.href = href;
+    setStatus("loading");
+    fetch("/api/beta-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: gmail.trim() }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Request failed");
+        setStatus("success");
+        setGmail("");
+      })
+      .catch(() => setStatus("error"));
   };
 
   return (
@@ -45,10 +54,17 @@ export default function RequestAccessPage() {
             />
             <button
               type="submit"
-              className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-600"
+              className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-emerald-300"
+              disabled={status === "loading"}
             >
-              Request Beta Access
+              {status === "loading" ? "Sending..." : "Request Beta Access"}
             </button>
+            {status === "success" ? (
+              <p className="text-sm text-emerald-600">Thanks! We received your request.</p>
+            ) : null}
+            {status === "error" ? (
+              <p className="text-sm text-rose-600">Unable to submit right now. Please try again.</p>
+            ) : null}
           </form>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
