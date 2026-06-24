@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function DemoDashboardPage() {
-  redirect("/demo?tab=overview");
+  redirect("/demo?tab=analyze");
 }

@@ -1,17 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import ChatExperience from "@/components/ChatExperience";
-import DashboardExperience from "@/components/DashboardExperience";
-import { demoAllocation, demoPositions, demoSummary } from "@/lib/demoData";
+import { demoAllocation, demoSummary } from "@/lib/demoData";
+import { getDemoSessionId } from "@/lib/demoSession";
 
-type DemoTab = "overview" | "chat" | "data";
+type DemoTab = "analyze" | "data";
+
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
+type ChatRunResponse = {
+  conversation_id: string;
+  response?: string | null;
+};
 
 const tabs: Array<{ id: DemoTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "chat", label: "Chat" },
+  { id: "analyze", label: "Analyze" },
   { id: "data", label: "Sample data" },
 ];
 
@@ -30,67 +39,374 @@ const sampleFiles = [
   },
 ];
 
-export default function DemoWorkspace({ initialTab = "overview" }: { initialTab?: DemoTab }) {
+const suggestedPrompts = ["Biggest holding?", "US vs India?", "Which sectors are overweight?"];
+const DEMO_DAILY_MESSAGE_LIMIT = 10;
+const DEMO_USAGE_STORAGE_KEY = "moniq_demo_chat_usage";
+const DEMO_CONVERSATION_STORAGE_KEY = "moniq_demo_chat_conversation_id";
+
+function makeId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatMoney(value: number) {
+  return value.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatPct(value: number | null, digits = 1) {
+  if (value === null) return "-";
+  return `${(value * 100).toFixed(digits)}%`;
+}
+
+function getDemoUsage() {
+  if (typeof window === "undefined") return 0;
+
+  const raw = window.localStorage.getItem(DEMO_USAGE_STORAGE_KEY);
+  if (!raw) return 0;
+
+  try {
+    const parsed = JSON.parse(raw) as { date?: string; messagesUsed?: number };
+    if (parsed.date !== todayKey()) return 0;
+    return parsed.messagesUsed ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveDemoUsage(messagesUsed: number) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    DEMO_USAGE_STORAGE_KEY,
+    JSON.stringify({ date: todayKey(), messagesUsed })
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+      <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+    </svg>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M5 6h14v9H8l-3 3V6Z" />
+      <path d="M8 9h8M8 12h5" />
+    </svg>
+  );
+}
+
+export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?: DemoTab }) {
   const validInitialTab = useMemo(
-    () => (tabs.some((tab) => tab.id === initialTab) ? initialTab : "overview"),
+    () => (tabs.some((tab) => tab.id === initialTab) ? initialTab : "analyze"),
     [initialTab]
   );
   const [activeTab, setActiveTab] = useState<DemoTab>(validInitialTab);
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: makeId(),
+      role: "assistant",
+      content: "Ask about the sample portfolio, or tap a holding to start.",
+    },
+  ]);
+  const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messagesUsed, setMessagesUsed] = useState(0);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
-  return (
-    <div className="px-6 py-10 lg:px-12">
-      <section className="flex flex-wrap items-start justify-between gap-5">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-stone-500">
-            Public demo
-          </p>
-          <h1 className="mt-3 text-4xl font-bold tracking-tight text-slate-950">
-            Try Moniq with sample data.
-          </h1>
-          <p className="mt-3 max-w-2xl text-lg leading-8 text-stone-600">
-            No sign-up required. Explore a read-only sample portfolio, ask questions,
-            and see the analytics flow.
-          </p>
-        </div>
-        <Link
-          href="/request-access"
-          className="rounded-xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-        >
-          Request access
-        </Link>
-      </section>
+  const messagesLeft = Math.max(0, DEMO_DAILY_MESSAGE_LIMIT - messagesUsed);
+  const topTickers = demoAllocation.tickers.slice(0, 5);
+  const topSector = demoAllocation.sectors[0];
 
-      <div className="mt-8 flex flex-wrap gap-2 border-b border-slate-200">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={`border-b-2 px-4 py-3 text-sm font-semibold ${
-              activeTab === tab.id
-                ? "border-slate-950 text-slate-950"
-                : "border-transparent text-stone-500 hover:text-slate-900"
+  useEffect(() => {
+    setDemoSessionId(getDemoSessionId());
+    setMessagesUsed(getDemoUsage());
+    if (typeof window !== "undefined") {
+      setConversationId(window.localStorage.getItem(DEMO_CONVERSATION_STORAGE_KEY));
+    }
+  }, []);
+
+  const askQuestion = async (question: string) => {
+    const trimmed = question.trim();
+    if (!trimmed || isSending) return;
+    if (messagesLeft <= 0) {
+      setError("You have reached today's demo limit. Request access to continue with your own portfolio.");
+      return;
+    }
+
+    const assistantId = makeId();
+    setError(null);
+    setInput("");
+    setIsSending(true);
+    setMessages((prev) => [
+      ...prev,
+      { id: makeId(), role: "user", content: trimmed },
+      { id: assistantId, role: "assistant", content: "Reading the sample portfolio..." },
+    ]);
+
+    try {
+      const response = await fetch("/api/demo/chat/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: trimmed,
+          conversation_id: conversationId,
+          demo_session_id: demoSessionId,
+          user_id: "demo",
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `Request failed: ${response.status}`);
+      }
+
+      const payload = (await response.json()) as ChatRunResponse;
+      if (payload.conversation_id) {
+        setConversationId(payload.conversation_id);
+        window.localStorage.setItem(DEMO_CONVERSATION_STORAGE_KEY, payload.conversation_id);
+      }
+
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === assistantId
+            ? { ...message, content: payload.response ?? "I could not produce a response." }
+            : message
+        )
+      );
+
+      const nextUsed = messagesUsed + 1;
+      setMessagesUsed(nextUsed);
+      saveDemoUsage(nextUsed);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to run demo chat.";
+      setError(message);
+      setMessages((prev) =>
+        prev.map((item) =>
+          item.id === assistantId
+            ? { ...item, content: `Sorry, something went wrong. ${message}` }
+            : item
+        )
+      );
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const prefillQuestion = (question: string) => {
+    setInput(question);
+    setIsMobileChatOpen(true);
+  };
+
+  const chatPanel = (
+    <div className="flex h-full min-h-[520px] flex-col bg-[#fbfaf7]">
+      <div className="flex items-center gap-3 px-6 py-5">
+        <ChatIcon />
+        <h2 className="text-lg font-bold text-slate-950">Ask Moniq</h2>
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto px-6">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+              message.role === "user"
+                ? "ml-auto border border-slate-200 bg-white text-slate-900"
+                : "bg-blue-100 text-blue-800"
             }`}
           >
-            {tab.label}
-          </button>
+            {message.content}
+          </div>
         ))}
       </div>
 
-      <div className="mt-8">
-        {activeTab === "overview" ? (
-          <DashboardExperience
-            summary={demoSummary}
-            allocation={demoAllocation}
-            positions={demoPositions}
-            mode="demo"
+      <div className="space-y-4 px-6 py-5">
+        <div>
+          <p className="text-sm font-semibold text-stone-500">Suggested</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {suggestedPrompts.map((prompt) => (
+              <button
+                key={prompt}
+                type="button"
+                onClick={() => askQuestion(prompt)}
+                disabled={isSending || messagesLeft <= 0}
+                className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-800 hover:border-slate-500 disabled:cursor-not-allowed disabled:text-stone-400"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+
+        <form
+          className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            askQuestion(input);
+          }}
+        >
+          <input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder="Ask about this portfolio..."
+            disabled={isSending || messagesLeft <= 0}
+            className="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-stone-400"
           />
+          <button
+            type="submit"
+            disabled={!input.trim() || isSending || messagesLeft <= 0}
+            className="text-2xl leading-none text-stone-600 disabled:text-stone-300"
+            aria-label="Send demo question"
+          >
+            -&gt;
+          </button>
+        </form>
+        <p className="text-center text-sm font-semibold text-stone-500">
+          {messagesLeft} questions left in demo
+        </p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="px-6 py-10 lg:px-12">
+      <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-blue-100 px-6 py-4 text-blue-800">
+          <div className="flex items-center gap-3 font-semibold">
+            <EyeIcon />
+            <span>Sample portfolio - read-only</span>
+          </div>
+          <Link href="/request-access" className="font-semibold hover:text-blue-950">
+            Analyze my own -&gt;
+          </Link>
+        </div>
+
+        <div className="flex gap-8 border-b border-slate-200 px-6">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`border-b-2 py-4 text-base font-semibold ${
+                activeTab === tab.id
+                  ? "border-slate-950 text-slate-950"
+                  : "border-transparent text-stone-500 hover:text-slate-900"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === "analyze" ? (
+          <div className="grid lg:grid-cols-[1.25fr_1fr]">
+            <div className="space-y-6 p-6 lg:p-8">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl bg-[#f3f1eb] p-5">
+                  <p className="text-sm font-semibold text-stone-600">Total value</p>
+                  <p className="mt-1 text-3xl font-bold text-slate-950">
+                    {formatMoney(demoSummary.totalValue)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[#f3f1eb] p-5">
+                  <p className="text-sm font-semibold text-stone-600">Unrealized P&amp;L</p>
+                  <p className="mt-1 text-3xl font-bold text-emerald-700">
+                    {formatPct(demoSummary.unrealizedPct)}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-bold text-slate-950">Allocation</h2>
+                <div className="mt-4 divide-y divide-slate-200">
+                  {topTickers.map((ticker, index) => (
+                    <button
+                      key={ticker.ticker}
+                      type="button"
+                      onClick={() => prefillQuestion(`Tell me about ${ticker.ticker}`)}
+                      className="flex w-full items-center justify-between gap-4 py-3 text-left text-lg hover:text-blue-700"
+                    >
+                      <span className="font-semibold text-slate-950">
+                        {ticker.ticker}
+                        {index === 0 ? (
+                          <span className="ml-2 text-base font-medium text-stone-500">tap to ask</span>
+                        ) : null}
+                      </span>
+                      <span className="font-semibold text-stone-700">{formatPct(ticker.weight)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 p-5">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-stone-500">
+                  Largest sector
+                </p>
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-2xl font-bold text-slate-950">{topSector?.sector ?? "-"}</p>
+                    <p className="mt-1 text-sm text-stone-500">
+                      Concentrated in AAPL, NVDA, and MSFT.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => prefillQuestion("Why is Technology overweight?")}
+                    className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-slate-500"
+                  >
+                    Ask why
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="hidden border-l border-slate-200 lg:block">{chatPanel}</div>
+
+            <button
+              type="button"
+              onClick={() => setIsMobileChatOpen(true)}
+              className="fixed inset-x-4 bottom-4 z-30 rounded-2xl bg-slate-950 px-5 py-4 text-base font-semibold text-white shadow-xl lg:hidden"
+            >
+              Ask Moniq
+            </button>
+
+            {isMobileChatOpen ? (
+              <div className="fixed inset-0 z-40 bg-slate-950/30 lg:hidden">
+                <div className="absolute inset-x-0 bottom-0 max-h-[82vh] overflow-hidden rounded-t-3xl bg-white shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                    <div className="font-bold text-slate-950">Ask Moniq</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileChatOpen(false)}
+                      className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold text-stone-600"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  {chatPanel}
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
-        {activeTab === "chat" ? <ChatExperience mode="demo" embedded /> : null}
-
         {activeTab === "data" ? (
-          <section className="space-y-5 rounded-3xl bg-white p-8 shadow-sm">
+          <section className="space-y-5 p-6 lg:p-8">
             <div>
               <h2 className="text-2xl font-semibold text-slate-950">Sample data</h2>
               <p className="mt-2 max-w-2xl text-sm text-stone-500">
@@ -118,7 +434,7 @@ export default function DemoWorkspace({ initialTab = "overview" }: { initialTab?
             </div>
           </section>
         ) : null}
-      </div>
+      </section>
     </div>
   );
 }
