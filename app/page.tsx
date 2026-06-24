@@ -14,6 +14,12 @@ export default function HomePage() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
+                href="/demo"
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Try Demo
+              </Link>
+              <Link
                 href="/request-access"
                 className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-600"
               >
@@ -81,6 +87,12 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link
+              href="/demo"
+              className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Try Demo
+            </Link>
             <Link
               href="/request-access"
               className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-600"

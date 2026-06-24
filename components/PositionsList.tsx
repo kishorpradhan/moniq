@@ -4,33 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
-
-type OpenRow = {
-  ticker: string;
-  quantity: number;
-  marketValue: number;
-  costBasis: number;
-  unrealizedPl: number;
-  returnPct: number | null;
-  dividendsReceived: number;
-  xirr: number | null;
-  contributionPct: number | null;
-  asOfDate: string;
-};
-
-type ClosedRow = {
-  ticker: string;
-  closedQuantity: number;
-  realizedCostBasis: number;
-  realizedProceeds: number;
-  realizedPl: number;
-  returnPct: number | null;
-  asOfDate: string;
-};
+import type { PositionsClosedRow, PositionsOpenRow } from "@/lib/portfolio";
 
 type PositionsResponse = {
-  open: OpenRow[];
-  closed: ClosedRow[];
+  open: PositionsOpenRow[];
+  closed: PositionsClosedRow[];
 };
 
 function formatMoney(value: number) {
@@ -42,12 +20,16 @@ function formatPct(value: number | null, digits = 1) {
   return `${(value * 100).toFixed(digits)}%`;
 }
 
-export default function PositionsList() {
-  const [data, setData] = useState<PositionsResponse | null>(null);
+export default function PositionsList({ data: providedData }: { data?: PositionsResponse }) {
+  const [data, setData] = useState<PositionsResponse | null>(providedData ?? null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { token } = useAuth();
 
   useEffect(() => {
+    if (providedData) {
+      setData(providedData);
+      return;
+    }
     let active = true;
     if (!token) return;
     authFetch("/api/portfolio/positions", token)
@@ -70,11 +52,11 @@ export default function PositionsList() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [providedData, token]);
 
   const merged = useMemo(() => {
-    if (!data) return [] as Array<{ ticker: string; open?: OpenRow; closed?: ClosedRow }>;
-    const map = new Map<string, { ticker: string; open?: OpenRow; closed?: ClosedRow }>();
+    if (!data) return [] as Array<{ ticker: string; open?: PositionsOpenRow; closed?: PositionsClosedRow }>;
+    const map = new Map<string, { ticker: string; open?: PositionsOpenRow; closed?: PositionsClosedRow }>();
     data.open.forEach((row) => {
       map.set(row.ticker, { ticker: row.ticker, open: row });
     });

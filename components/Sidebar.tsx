@@ -7,6 +7,7 @@ import { useAuth } from "@/components/AuthProvider";
 
 const publicLinks = [
   { href: "/", label: "Home", public: true },
+  { href: "/demo", label: "Demo", public: true },
   { href: "/about", label: "About", public: true },
 ];
 
@@ -14,6 +15,12 @@ const productLinks = [
   { href: "/dashboard", label: "Dashboard", public: false },
   { href: "/upload", label: "Upload", public: false },
   { href: "/chat", label: "Chat", public: false },
+];
+
+const demoLinks = [
+  { href: "/demo/dashboard", label: "Demo Dashboard" },
+  { href: "/demo/chat", label: "Demo Chat" },
+  { href: "/demo/upload", label: "Sample Data" },
 ];
 
 export default function Sidebar() {
@@ -66,6 +73,23 @@ export default function Sidebar() {
               <Link key={link.href} href={link.href} className={className}>
                 <span>{link.label}</span>
                 {locked ? <span className="text-xs">🔒</span> : null}
+              </Link>
+            );
+          })}
+        </div>
+
+        <div className="space-y-2">
+          {demoLinks.map((link) => {
+            const isActive = pathname === link.href;
+            const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
+              isActive
+                ? "bg-emerald-50 text-emerald-800 shadow"
+                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            }`;
+
+            return (
+              <Link key={link.href} href={link.href} className={className}>
+                <span>{link.label}</span>
               </Link>
             );
           })}
