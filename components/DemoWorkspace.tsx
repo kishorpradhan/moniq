@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { demoAllocation, demoSummary } from "@/lib/demoData";
+import { demoAllocation, demoPositions, demoSummary } from "@/lib/demoData";
 import { getDemoSessionId } from "@/lib/demoSession";
 
 type DemoTab = "analyze" | "data";
@@ -58,6 +58,11 @@ function formatMoney(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   });
+}
+
+function formatSignedMoney(value: number) {
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${formatMoney(value)}`;
 }
 
 function formatPct(value: number | null, digits = 1) {
@@ -128,7 +133,14 @@ export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?:
   const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
   const messagesLeft = Math.max(0, DEMO_DAILY_MESSAGE_LIMIT - messagesUsed);
-  const topTickers = demoAllocation.tickers.slice(0, 5);
+  const topTickers = demoAllocation.tickers.slice(0, 5).map((ticker) => {
+    const position = demoPositions.open.find((item) => item.ticker === ticker.ticker);
+    return {
+      ...ticker,
+      unrealizedPl: position?.unrealizedPl ?? 0,
+      returnPct: position?.returnPct ?? null,
+    };
+  });
   const topSector = demoAllocation.sectors[0];
 
   useEffect(() => {
@@ -332,22 +344,59 @@ export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?:
               </div>
 
               <div>
-                <h2 className="text-xl font-bold text-slate-950">Allocation</h2>
+                <div className="flex items-end justify-between gap-4">
+                  <h2 className="text-xl font-bold text-slate-950">Holdings</h2>
+                  <div className="hidden grid-cols-[70px_96px_86px_86px] gap-4 text-right text-xs font-semibold uppercase tracking-wide text-stone-400 sm:grid">
+                    <span>Weight</span>
+                    <span>Value</span>
+                    <span>P&amp;L</span>
+                    <span>Return</span>
+                  </div>
+                </div>
                 <div className="mt-4 divide-y divide-slate-200">
                   {topTickers.map((ticker, index) => (
                     <button
                       key={ticker.ticker}
                       type="button"
                       onClick={() => prefillQuestion(`Tell me about ${ticker.ticker}`)}
-                      className="flex w-full items-center justify-between gap-4 py-3 text-left text-lg hover:text-blue-700"
+                      className="grid w-full gap-3 py-3 text-left hover:text-blue-700 sm:grid-cols-[1fr_70px_96px_86px_86px] sm:items-center sm:gap-4"
                     >
-                      <span className="font-semibold text-slate-950">
+                      <span className="text-lg font-semibold text-slate-950">
                         {ticker.ticker}
                         {index === 0 ? (
-                          <span className="ml-2 text-base font-medium text-stone-500">tap to ask</span>
+                          <span className="ml-2 text-sm font-medium text-stone-500">tap to ask</span>
                         ) : null}
                       </span>
-                      <span className="font-semibold text-stone-700">{formatPct(ticker.weight)}</span>
+                      <div className="grid grid-cols-2 gap-2 text-sm sm:contents">
+                        <span className="flex justify-between gap-3 sm:block sm:text-right">
+                          <span className="font-semibold text-stone-400 sm:hidden">Weight</span>
+                          <span className="font-semibold text-stone-800">{formatPct(ticker.weight)}</span>
+                        </span>
+                        <span className="flex justify-between gap-3 sm:block sm:text-right">
+                          <span className="font-semibold text-stone-400 sm:hidden">Value</span>
+                          <span className="font-semibold text-stone-800">{formatMoney(ticker.marketValue)}</span>
+                        </span>
+                        <span className="flex justify-between gap-3 sm:block sm:text-right">
+                          <span className="font-semibold text-stone-400 sm:hidden">P&amp;L</span>
+                          <span
+                            className={`font-semibold ${
+                              ticker.unrealizedPl >= 0 ? "text-emerald-700" : "text-rose-600"
+                            }`}
+                          >
+                            {formatSignedMoney(ticker.unrealizedPl)}
+                          </span>
+                        </span>
+                        <span className="flex justify-between gap-3 sm:block sm:text-right">
+                          <span className="font-semibold text-stone-400 sm:hidden">Return</span>
+                          <span
+                            className={`font-semibold ${
+                              (ticker.returnPct ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"
+                            }`}
+                          >
+                            {formatPct(ticker.returnPct)}
+                          </span>
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>
