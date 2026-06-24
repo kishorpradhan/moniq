@@ -1,11 +1,11 @@
 import Link from "next/link";
 
-import Shell from "@/components/Shell";
+import PublicShell from "@/components/PublicShell";
 
 export default function AboutPage() {
   return (
-    <Shell>
-      <section className="rounded-3xl bg-white p-10 shadow-sm">
+    <PublicShell>
+      <section className="px-6 py-12 lg:px-12">
         <div className="max-w-3xl space-y-5">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-600">About Moniq</p>
           <h1 className="text-3xl font-bold text-slate-900">About Moniq</h1>
@@ -53,6 +53,6 @@ export default function AboutPage() {
           </div>
         </div>
       </section>
-    </Shell>
+    </PublicShell>
   );
 }

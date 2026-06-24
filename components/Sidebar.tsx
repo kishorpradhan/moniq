@@ -17,12 +17,6 @@ const productLinks = [
   { href: "/chat", label: "Chat", public: false },
 ];
 
-const demoLinks = [
-  { href: "/demo/dashboard", label: "Demo Dashboard" },
-  { href: "/demo/chat", label: "Demo Chat" },
-  { href: "/demo/upload", label: "Sample Data" },
-];
-
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -78,22 +72,6 @@ export default function Sidebar() {
           })}
         </div>
 
-        <div className="space-y-2">
-          {demoLinks.map((link) => {
-            const isActive = pathname === link.href;
-            const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
-              isActive
-                ? "bg-emerald-50 text-emerald-800 shadow"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`;
-
-            return (
-              <Link key={link.href} href={link.href} className={className}>
-                <span>{link.label}</span>
-              </Link>
-            );
-          })}
-        </div>
       </nav>
 
       <div className="mt-10 space-y-2">

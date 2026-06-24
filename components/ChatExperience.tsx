@@ -117,7 +117,13 @@ function formatPayload(payload: ChatRunResponse) {
   return "I could not produce a response.";
 }
 
-export default function ChatExperience({ mode = "app" }: { mode?: ChatMode }) {
+export default function ChatExperience({
+  mode = "app",
+  embedded = false,
+}: {
+  mode?: ChatMode;
+  embedded?: boolean;
+}) {
   const isDemo = mode === "demo";
   const storageKey = isDemo ? DEMO_HISTORY_STORAGE_KEY : APP_HISTORY_STORAGE_KEY;
   const starterPrompts = isDemo ? demoStarterPrompts : appStarterPrompts;
@@ -286,8 +292,8 @@ export default function ChatExperience({ mode = "app" }: { mode?: ChatMode }) {
     );
   }
 
-  return (
-    <Shell>
+  const content = (
+    <>
       <header className="rounded-3xl bg-white p-8 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -435,6 +441,10 @@ export default function ChatExperience({ mode = "app" }: { mode?: ChatMode }) {
           </aside>
         ) : null}
       </section>
-    </Shell>
+    </>
   );
+
+  if (embedded) return content;
+
+  return <Shell>{content}</Shell>;
 }

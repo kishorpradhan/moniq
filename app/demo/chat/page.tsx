@@ -1,5 +1,5 @@
-import ChatExperience from "@/components/ChatExperience";
+import { redirect } from "next/navigation";
 
 export default function DemoChatPage() {
-  return <ChatExperience mode="demo" />;
+  redirect("/demo?tab=chat");
 }

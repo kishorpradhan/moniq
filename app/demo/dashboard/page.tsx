@@ -1,16 +1,5 @@
-import DashboardExperience from "@/components/DashboardExperience";
-import Shell from "@/components/Shell";
-import { demoAllocation, demoPositions, demoSummary } from "@/lib/demoData";
+import { redirect } from "next/navigation";
 
 export default function DemoDashboardPage() {
-  return (
-    <Shell>
-      <DashboardExperience
-        summary={demoSummary}
-        allocation={demoAllocation}
-        positions={demoPositions}
-        mode="demo"
-      />
-    </Shell>
-  );
+  redirect("/demo?tab=overview");
 }
