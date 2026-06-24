@@ -218,9 +218,9 @@ export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?:
     }
   };
 
-  const prefillQuestion = (question: string) => {
-    setInput(question);
+  const askFromHolding = (question: string) => {
     setIsMobileChatOpen(true);
+    askQuestion(question);
   };
 
   const chatPanel = (
@@ -358,7 +358,11 @@ export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?:
                     <button
                       key={ticker.ticker}
                       type="button"
-                      onClick={() => prefillQuestion(`Tell me about ${ticker.ticker}`)}
+                      onClick={() =>
+                        askFromHolding(
+                          `Give me more detail on ${ticker.ticker}: weight, market value, profit, return, and whether it is driving portfolio risk.`
+                        )
+                      }
                       className="grid w-full gap-3 py-3 text-left hover:text-blue-700 sm:grid-cols-[1fr_70px_96px_86px_86px] sm:items-center sm:gap-4"
                     >
                       <span className="text-lg font-semibold text-slate-950">
@@ -415,7 +419,7 @@ export default function DemoWorkspace({ initialTab = "analyze" }: { initialTab?:
                   </div>
                   <button
                     type="button"
-                    onClick={() => prefillQuestion("Why is Technology overweight?")}
+                    onClick={() => askFromHolding("Why is Technology overweight?")}
                     className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:border-slate-500"
                   >
                     Ask why

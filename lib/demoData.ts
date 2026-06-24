@@ -137,6 +137,31 @@ export const demoPositions: {
 
 export function getDemoChatAnswer(question: string) {
   const normalized = question.toLowerCase();
+  const matchedPosition = demoPositions.open.find((position) =>
+    normalized.includes(position.ticker.toLowerCase())
+  );
+
+  if (matchedPosition) {
+    const allocation = demoAllocation.tickers.find((ticker) => ticker.ticker === matchedPosition.ticker);
+    const weight = allocation?.weight !== null && allocation?.weight !== undefined
+      ? `${(allocation.weight * 100).toFixed(1)}%`
+      : "unknown";
+    const marketValue = matchedPosition.marketValue.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
+    const profit = matchedPosition.unrealizedPl.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      maximumFractionDigits: 0,
+    });
+    const signedProfit = matchedPosition.unrealizedPl > 0 ? `+${profit}` : profit;
+    const returnPct =
+      matchedPosition.returnPct !== null ? `${(matchedPosition.returnPct * 100).toFixed(1)}%` : "unknown";
+
+    return `${matchedPosition.ticker} is ${weight} of the sample portfolio with ${marketValue} in market value. Unrealized P&L is ${signedProfit}, and the open-position return is ${returnPct}. ${matchedPosition.contributionPct && matchedPosition.contributionPct > 0.15 ? "It is a major driver of portfolio concentration, so changes in this holding can noticeably move overall results." : "It is a meaningful but not dominant contributor to the portfolio."}`;
+  }
 
   if (normalized.includes("top") || normalized.includes("holding")) {
     return "The top holdings in this sample portfolio are AAPL at 21.2%, NVDA at 18.8%, and MSFT at 16.4%. Together, the top three represent 56.4% of the portfolio, so concentration risk is the main thing to watch.";
