@@ -9,7 +9,13 @@ import ProfileSelector from "@/components/ProfileSelector";
 import Shell from "@/components/Shell";
 import { useAuth } from "@/components/AuthProvider";
 import { authFetch } from "@/lib/authFetch";
-import type { AllocationSector, AllocationTicker, SummaryResponse } from "@/lib/portfolio";
+import type {
+  AllocationSector,
+  AllocationTicker,
+  PositionsClosedRow,
+  PositionsOpenRow,
+  SummaryResponse,
+} from "@/lib/portfolio";
 
 export default function DashboardPage() {
   const { token, user, loading, selectedProfile, isDemo, demoSession } = useAuth();
@@ -17,6 +23,10 @@ export default function DashboardPage() {
   const [allocation, setAllocation] = useState<{
     tickers: AllocationTicker[];
     sectors: AllocationSector[];
+  } | null>(null);
+  const [positions, setPositions] = useState<{
+    open: PositionsOpenRow[];
+    closed: PositionsClosedRow[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +37,7 @@ export default function DashboardPage() {
     setError(null);
     setSummary(null);
     setAllocation(null);
+    setPositions(null);
 
     const loadJson = async <T,>(path: string): Promise<T> => {
       const res = await authFetch(path, token, {
@@ -44,11 +55,13 @@ export default function DashboardPage() {
     Promise.all([
       loadJson<SummaryResponse>("/api/portfolio/summary"),
       loadJson<{ tickers: AllocationTicker[]; sectors: AllocationSector[] }>("/api/portfolio/allocation"),
+      loadJson<{ open: PositionsOpenRow[]; closed: PositionsClosedRow[] }>("/api/portfolio/positions"),
     ])
-      .then(([summaryPayload, allocationPayload]) => {
+      .then(([summaryPayload, allocationPayload, positionsPayload]) => {
         if (active) {
           setSummary(summaryPayload);
           setAllocation(allocationPayload);
+          setPositions(positionsPayload);
         }
       })
       .catch(() => {
@@ -103,7 +116,7 @@ export default function DashboardPage() {
             <section className="rounded-lg bg-white p-8 text-sm text-rose-600 shadow-sm">
               {error}
             </section>
-          ) : !summary || !allocation ? (
+          ) : !summary || !allocation || !positions ? (
             <section className="rounded-lg bg-white p-8 text-sm text-slate-500 shadow-sm">
               Loading selected profile...
             </section>
@@ -124,7 +137,12 @@ export default function DashboardPage() {
               </a>
             </section>
           ) : (
-            <DashboardExperience summary={summary} allocation={allocation} showHeader={false} />
+            <DashboardExperience
+              summary={summary}
+              allocation={allocation}
+              positions={positions}
+              showHeader={false}
+            />
           )}
         </div>
 
