@@ -15,6 +15,7 @@ logger = logging.getLogger("portfolio-metrics")
 @dataclass
 class ActivityRow:
     user_id: str
+    profile_id: Optional[str]
     account_id: str
     ticker: str
     activity_type: str
@@ -37,12 +38,14 @@ class PositionState:
     cashflows: List[tuple[date, Decimal]]
 
 
-def recompute_for_account(conn, user_id: str, account_id: str, as_of_date: date) -> int:
+def recompute_for_account(
+    conn, user_id: str, account_id: str, as_of_date: date, profile_id: Optional[str] = None
+) -> int:
     from app.repositories import positions_metrics as metrics_repo
     from app.repositories import positions_metrics_closed as closed_repo
     from app.repositories import sector_allocations as sector_repo
 
-    activities = _fetch_activities(conn, user_id=user_id, account_id=account_id)
+    activities = _fetch_activities(conn, user_id=user_id, account_id=account_id, profile_id=profile_id)
     open_rows, closed_rows, sector_rows = _compute_metrics(activities, as_of_date, conn)
     with conn.cursor() as cur:
         metrics_repo.ensure_table(cur)
@@ -73,7 +76,12 @@ def recompute_all(conn, as_of_date: date) -> int:
     return inserted
 
 
-def _fetch_activities(conn, user_id: Optional[str] = None, account_id: Optional[str] = None):
+def _fetch_activities(
+    conn,
+    user_id: Optional[str] = None,
+    account_id: Optional[str] = None,
+    profile_id: Optional[str] = None,
+):
     clauses = ["ticker IS NOT NULL"]
     params = []
     if user_id:
@@ -82,9 +90,13 @@ def _fetch_activities(conn, user_id: Optional[str] = None, account_id: Optional[
     if account_id:
         clauses.append("account_id = %s")
         params.append(account_id)
+    if profile_id:
+        clauses.append("profile_id = %s")
+        params.append(profile_id)
 
     sql = f"""
         SELECT user_id,
+               profile_id,
                account_id,
                ticker,
                activity_type,
@@ -105,14 +117,15 @@ def _fetch_activities(conn, user_id: Optional[str] = None, account_id: Optional[
         activities.append(
             ActivityRow(
                 user_id=row[0],
-                account_id=row[1],
-                ticker=row[2],
-                activity_type=row[3],
-                quantity=row[4],
-                price=row[5],
-                amount=row[6],
-                currency=row[7] or "USD",
-                activity_date=row[8],
+                profile_id=str(row[1]) if row[1] else None,
+                account_id=row[2],
+                ticker=row[3],
+                activity_type=row[4],
+                quantity=row[5],
+                price=row[6],
+                amount=row[7],
+                currency=row[8] or "USD",
+                activity_date=row[9],
             )
         )
     return activities
@@ -123,7 +136,7 @@ def _compute_metrics(
 ) -> Tuple[List[dict], List[dict], List[dict]]:
     grouped = defaultdict(list)
     for activity in activities:
-        key = (activity.user_id, activity.account_id, activity.ticker)
+        key = (activity.user_id, activity.profile_id, activity.account_id, activity.ticker)
         grouped[key].append(activity)
 
     open_rows: List[dict] = []
@@ -132,7 +145,7 @@ def _compute_metrics(
     open_market_values = defaultdict(Decimal)
     open_sector_values = defaultdict(lambda: defaultdict(Decimal))
 
-    for (user_id, account_id, ticker), rows in grouped.items():
+    for (user_id, profile_id, account_id, ticker), rows in grouped.items():
         rows.sort(key=lambda r: r.activity_date)
         position = _build_position(rows)
 
@@ -161,6 +174,7 @@ def _compute_metrics(
         open_rows.append(
             {
                 "user_id": user_id,
+                "profile_id": profile_id,
                 "account_id": account_id,
                 "ticker": ticker,
                 "as_of_date": as_of_date,
@@ -182,6 +196,7 @@ def _compute_metrics(
         closed_rows.append(
             {
                 "user_id": user_id,
+                "profile_id": profile_id,
                 "account_id": account_id,
                 "ticker": ticker,
                 "as_of_date": as_of_date,
@@ -195,11 +210,11 @@ def _compute_metrics(
         )
 
         if position.open_quantity > 0 and market_value is not None:
-            open_market_values[(user_id, account_id)] += market_value
-            open_sector_values[(user_id, account_id)][sector or "Unknown"] += market_value
+            open_market_values[(user_id, profile_id, account_id)] += market_value
+            open_sector_values[(user_id, profile_id, account_id)][sector or "Unknown"] += market_value
 
     for row in open_rows:
-        key = (row["user_id"], row["account_id"])
+        key = (row["user_id"], row.get("profile_id"), row["account_id"])
         total_value = open_market_values.get(key)
         if total_value and row.get("market_value"):
             row["contribution_pct"] = (row["market_value"] / total_value).quantize(
@@ -208,8 +223,8 @@ def _compute_metrics(
         else:
             row["contribution_pct"] = None
 
-    for (user_id, account_id), sector_map in open_sector_values.items():
-        total_value = open_market_values.get((user_id, account_id))
+    for (user_id, profile_id, account_id), sector_map in open_sector_values.items():
+        total_value = open_market_values.get((user_id, profile_id, account_id))
         for sector, value in sector_map.items():
             pct = None
             if total_value and value is not None:
@@ -217,6 +232,7 @@ def _compute_metrics(
             sector_rows.append(
                 {
                     "user_id": user_id,
+                    "profile_id": profile_id,
                     "account_id": account_id,
                     "as_of_date": as_of_date,
                     "sector": sector or "Unknown",

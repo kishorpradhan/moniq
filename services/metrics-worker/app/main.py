@@ -22,6 +22,7 @@ async def recompute_metrics(request: Request):
     payload = await request.json() if request.headers.get("content-type") else {}
     user_id = payload.get("user_id") if isinstance(payload, dict) else None
     account_id = payload.get("account_id") if isinstance(payload, dict) else None
+    profile_id = payload.get("profile_id") if isinstance(payload, dict) else None
     as_of_value = payload.get("as_of_date") if isinstance(payload, dict) else None
 
     as_of_date = date.today()
@@ -34,7 +35,7 @@ async def recompute_metrics(request: Request):
     conn = get_db_conn()
     try:
         if user_id and account_id:
-            inserted = recompute_for_account(conn, user_id, account_id, as_of_date)
+            inserted = recompute_for_account(conn, user_id, account_id, as_of_date, profile_id)
         else:
             inserted = recompute_all(conn, as_of_date)
         return {"ok": True, "rows_written": inserted, "as_of_date": as_of_date.isoformat()}

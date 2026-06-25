@@ -11,6 +11,7 @@ def ensure_table(cur):
         CREATE TABLE IF NOT EXISTS positions_metrics_open (
             id UUID PRIMARY KEY,
             user_id TEXT NOT NULL,
+            profile_id UUID,
             account_id TEXT NOT NULL,
             ticker TEXT NOT NULL,
             as_of_date DATE NOT NULL,
@@ -30,10 +31,11 @@ def ensure_table(cur):
             calc_version TEXT NOT NULL DEFAULT 'v1',
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            UNIQUE (user_id, account_id, ticker, as_of_date)
+            UNIQUE (user_id, profile_id, account_id, ticker, as_of_date)
         )
         """
     )
+    cur.execute("ALTER TABLE positions_metrics_open ADD COLUMN IF NOT EXISTS profile_id UUID")
 
 
 def upsert_metrics(cur, rows: Iterable[dict]) -> int:
@@ -44,6 +46,7 @@ def upsert_metrics(cur, rows: Iterable[dict]) -> int:
     columns = [
         "id",
         "user_id",
+        "profile_id",
         "account_id",
         "ticker",
         "as_of_date",
@@ -70,6 +73,7 @@ def upsert_metrics(cur, rows: Iterable[dict]) -> int:
             (
                 str(row.get("id") or uuid.uuid4()),
                 row["user_id"],
+                row.get("profile_id"),
                 row["account_id"],
                 row["ticker"],
                 row["as_of_date"],
@@ -93,7 +97,7 @@ def upsert_metrics(cur, rows: Iterable[dict]) -> int:
 
     insert_sql = f"""
         INSERT INTO positions_metrics_open ({", ".join(columns)}) VALUES %s
-        ON CONFLICT (user_id, account_id, ticker, as_of_date) DO UPDATE SET
+        ON CONFLICT (user_id, profile_id, account_id, ticker, as_of_date) DO UPDATE SET
             position_status = EXCLUDED.position_status,
             quantity = EXCLUDED.quantity,
             market_value = EXCLUDED.market_value,

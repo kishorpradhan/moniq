@@ -3,30 +3,32 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 
-def fetch_summary(cur, user_id: str) -> Dict[str, object]:
+def fetch_summary(cur, user_id: str, profile_id: str | None = None) -> Dict[str, object]:
+    open_where, open_params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT
             MAX(as_of_date) AS as_of_date,
             COALESCE(SUM(market_value), 0) AS total_value,
             COALESCE(SUM(cost_basis), 0) AS total_invested,
             COALESCE(SUM(unrealized_pl), 0) AS unrealized_pl
         FROM positions_metrics_open
-        WHERE user_id = %s
+        WHERE {open_where}
         """,
-        (user_id,),
+        open_params,
     )
     open_row = cur.fetchone() or {}
 
+    closed_where, closed_params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT
             MAX(as_of_date) AS as_of_date,
             COALESCE(SUM(realized_pl), 0) AS realized_pl
         FROM positions_metrics_closed
-        WHERE user_id = %s
+        WHERE {closed_where}
         """,
-        (user_id,),
+        closed_params,
     )
     closed_row = cur.fetchone() or {}
 
@@ -45,17 +47,18 @@ def fetch_summary(cur, user_id: str) -> Dict[str, object]:
     }
 
 
-def fetch_allocation(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
+def fetch_allocation(cur, user_id: str, profile_id: str | None = None) -> Dict[str, List[Dict[str, object]]]:
+    where, params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT ticker,
                COALESCE(market_value, 0) AS market_value,
                contribution_pct
         FROM positions_metrics_open
-        WHERE user_id = %s
+        WHERE {where}
         ORDER BY market_value DESC NULLS LAST
         """,
-        (user_id,),
+        params,
     )
     tickers = [
         {
@@ -66,16 +69,17 @@ def fetch_allocation(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
         for row in cur.fetchall()
     ]
 
+    where, params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT sector,
                COALESCE(market_value, 0) AS market_value,
                contribution_pct
         FROM portfolio_sector_allocations
-        WHERE user_id = %s
+        WHERE {where}
         ORDER BY market_value DESC NULLS LAST
         """,
-        (user_id,),
+        params,
     )
     sectors = [
         {
@@ -89,9 +93,10 @@ def fetch_allocation(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
     return {"tickers": tickers, "sectors": sectors}
 
 
-def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
+def fetch_positions(cur, user_id: str, profile_id: str | None = None) -> Dict[str, List[Dict[str, object]]]:
+    where, params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT
             ticker,
             as_of_date,
@@ -104,10 +109,10 @@ def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
             xirr,
             contribution_pct
         FROM positions_metrics_open
-        WHERE user_id = %s
+        WHERE {where}
         ORDER BY market_value DESC NULLS LAST
         """,
-        (user_id,),
+        params,
     )
     open_rows = [
         {
@@ -125,8 +130,9 @@ def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
         for row in cur.fetchall()
     ]
 
+    where, params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT
             ticker,
             as_of_date,
@@ -136,10 +142,10 @@ def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
             realized_pl,
             return_pct
         FROM positions_metrics_closed
-        WHERE user_id = %s
+        WHERE {where}
         ORDER BY realized_pl DESC NULLS LAST
         """,
-        (user_id,),
+        params,
     )
     closed_rows = [
         {
@@ -157,9 +163,10 @@ def fetch_positions(cur, user_id: str) -> Dict[str, List[Dict[str, object]]]:
     return {"open": open_rows, "closed": closed_rows}
 
 
-def fetch_recent_uploads(cur, user_id: str, limit: int = 10) -> List[Dict[str, object]]:
+def fetch_recent_uploads(cur, user_id: str, limit: int = 10, profile_id: str | None = None) -> List[Dict[str, object]]:
+    where, params = _portfolio_where(user_id, profile_id)
     cur.execute(
-        """
+        f"""
         SELECT
             id,
             bucket,
@@ -170,7 +177,8 @@ def fetch_recent_uploads(cur, user_id: str, limit: int = 10) -> List[Dict[str, o
             row_count,
             inserted_count,
             skipped_count,
-            error
+            error,
+            profile_id
         FROM (
             SELECT DISTINCT ON (object_name)
                 id,
@@ -182,15 +190,16 @@ def fetch_recent_uploads(cur, user_id: str, limit: int = 10) -> List[Dict[str, o
                 row_count,
                 inserted_count,
                 skipped_count,
-                error
+                error,
+                profile_id
             FROM ingestion_runs
-            WHERE user_id = %s
+            WHERE {where}
             ORDER BY object_name, started_at DESC
         ) latest
         ORDER BY started_at DESC
         LIMIT %s
         """,
-        (user_id, limit),
+        (*params, limit),
     )
     rows = cur.fetchall()
     return [
@@ -205,10 +214,17 @@ def fetch_recent_uploads(cur, user_id: str, limit: int = 10) -> List[Dict[str, o
             "insertedCount": row[7],
             "skippedCount": row[8],
             "error": row[9],
+            "profileId": str(row[10]) if row[10] else None,
             "formatMismatch": _is_format_mismatch(row[3], row[6], row[7], row[8]),
         }
         for row in rows
     ]
+
+
+def _portfolio_where(user_id: str, profile_id: str | None = None) -> Tuple[str, tuple]:
+    if profile_id:
+        return "user_id = %s AND profile_id = %s", (user_id, profile_id)
+    return "user_id = %s", (user_id,)
 
 
 def _to_date(value) -> str:

@@ -101,8 +101,10 @@ function LoginContent() {
       .then(() => {
         if (active) router.push(nextPath);
       })
-      .catch(() => {
-        if (active) setError("Your account is not on the beta allowlist yet.");
+      .catch((err) => {
+        if (!active) return;
+        const message = err instanceof Error ? err.message : "Unable to verify beta access.";
+        setError(message);
       })
       .finally(() => {
         if (active) setChecking(false);

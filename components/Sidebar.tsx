@@ -7,20 +7,19 @@ import { useAuth } from "@/components/AuthProvider";
 
 const publicLinks = [
   { href: "/", label: "Home", public: true },
-  { href: "/demo", label: "Demo", public: true },
+  { href: "/demo", label: "Demo", public: true, authed: false },
   { href: "/about", label: "About", public: true },
 ];
 
 const productLinks = [
-  { href: "/dashboard", label: "Dashboard", public: false },
+  { href: "/dashboard", label: "Portfolio", public: false },
   { href: "/upload", label: "Upload", public: false },
-  { href: "/chat", label: "Chat", public: false },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, signOut, isDemo, exitDemo } = useAuth();
   const isAuthed = Boolean(user);
 
   return (
@@ -28,15 +27,24 @@ export default function Sidebar() {
       <div className="mb-8 text-2xl font-bold tracking-tight text-slate-900">Moniq</div>
 
       {!loading && isAuthed ? (
-        <div className="mb-8 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+        <div className="mb-8 rounded-lg border border-emerald-100 bg-emerald-50 px-4 py-3">
           <div className="text-xs uppercase tracking-[0.2em] text-emerald-600">Signed in</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">{user?.email}</div>
+          <div className="mt-1 truncate text-sm font-semibold text-slate-900">{user?.email}</div>
+        </div>
+      ) : null}
+
+      {!loading && isDemo ? (
+        <div className="mb-8 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Demo mode</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">Read-only sample profiles</div>
         </div>
       ) : null}
 
       <nav className="space-y-4">
         <div className="space-y-2">
-          {publicLinks.map((link) => {
+          {publicLinks
+            .filter((link) => link.authed !== false || (!isAuthed && !isDemo))
+            .map((link) => {
             const isActive = pathname === link.href;
             const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
               isActive
@@ -52,9 +60,9 @@ export default function Sidebar() {
         </div>
 
         <div className="space-y-2">
-          {productLinks.map((link) => {
+          {productLinks.filter((link) => !(isDemo && link.href === "/upload")).map((link) => {
             const isActive = pathname === link.href;
-            const locked = !isAuthed;
+            const locked = !isAuthed && !isDemo;
             const className = `flex items-center justify-between rounded-lg px-4 py-3 text-sm font-medium ${
               isActive
                 ? "bg-slate-100 text-slate-900 shadow"
@@ -66,7 +74,7 @@ export default function Sidebar() {
             return (
               <Link key={link.href} href={link.href} className={className}>
                 <span>{link.label}</span>
-                {locked ? <span className="text-xs">🔒</span> : null}
+                {locked ? <span className="text-xs">Lock</span> : null}
               </Link>
             );
           })}
@@ -75,7 +83,7 @@ export default function Sidebar() {
       </nav>
 
       <div className="mt-10 space-y-2">
-        {!isAuthed ? (
+        {!isAuthed && !isDemo ? (
           <>
             <button
               className="w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-white"
@@ -92,6 +100,17 @@ export default function Sidebar() {
               Login
             </button>
           </>
+        ) : isDemo ? (
+          <button
+            className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600"
+            type="button"
+            onClick={() => {
+              exitDemo();
+              router.push("/");
+            }}
+          >
+            Exit demo
+          </button>
         ) : (
           <button
             className="w-full rounded-lg border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-600"

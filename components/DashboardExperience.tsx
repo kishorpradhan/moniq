@@ -23,6 +23,7 @@ type DashboardExperienceProps = {
     closed: PositionsClosedRow[];
   };
   mode?: "app" | "demo";
+  showHeader?: boolean;
 };
 
 function formatMoney(value: number, digits = 0) {
@@ -43,6 +44,7 @@ export default function DashboardExperience({
   allocation,
   positions,
   mode = "app",
+  showHeader = true,
 }: DashboardExperienceProps) {
   const tickers = useMemo(() => allocation.tickers.slice(0, 6), [allocation]);
   const sectorSlice = useMemo(() => allocation.sectors.slice(0, 4), [allocation]);
@@ -50,7 +52,8 @@ export default function DashboardExperience({
 
   return (
     <>
-      <header className="space-y-2 rounded-3xl bg-white p-8 shadow-sm">
+      {showHeader ? (
+      <header className="space-y-2 rounded-lg bg-white p-8 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -73,19 +76,20 @@ export default function DashboardExperience({
           ) : null}
         </div>
       </header>
+      ) : null}
 
       <section className="grid gap-4 lg:grid-cols-4">
-        <div className="rounded-3xl bg-[#f7f3eb] p-6">
+        <div className="rounded-lg bg-[#f7f3eb] p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Total value</p>
           <p className="mt-3 text-3xl font-semibold text-slate-900">{formatMoney(summary.totalValue)}</p>
           <p className="mt-1 text-sm text-slate-500">Market value</p>
         </div>
-        <div className="rounded-3xl bg-[#f7f3eb] p-6">
+        <div className="rounded-lg bg-[#f7f3eb] p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Total invested</p>
           <p className="mt-3 text-3xl font-semibold text-slate-900">{formatMoney(summary.totalInvested)}</p>
           <p className="mt-1 text-sm text-slate-500">Cost basis</p>
         </div>
-        <div className="rounded-3xl bg-[#f7f3eb] p-6">
+        <div className="rounded-lg bg-[#f7f3eb] p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Unrealized P&amp;L</p>
           <p className={`mt-3 text-3xl font-semibold ${summary.unrealizedPl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             {summary.unrealizedPl >= 0 ? "+" : ""}
@@ -93,7 +97,7 @@ export default function DashboardExperience({
           </p>
           <p className="mt-1 text-sm text-emerald-600">{formatPct(summary.unrealizedPct, 1)}</p>
         </div>
-        <div className="rounded-3xl bg-[#f7f3eb] p-6">
+        <div className="rounded-lg bg-[#f7f3eb] p-6">
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Realized P&amp;L</p>
           <p className={`mt-3 text-3xl font-semibold ${summary.realizedPl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             {summary.realizedPl >= 0 ? "+" : ""}
@@ -103,7 +107,7 @@ export default function DashboardExperience({
         </div>
       </section>
 
-      <section className="rounded-3xl bg-white p-8 shadow-sm">
+      <section className="rounded-lg bg-white p-8 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Portfolio allocation</h2>
@@ -134,7 +138,7 @@ export default function DashboardExperience({
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
-        <div className="rounded-3xl bg-white p-6 shadow-sm lg:col-span-2">
+        <div className="rounded-lg bg-white p-6 shadow-sm lg:col-span-2">
           <h3 className="text-lg font-semibold text-slate-900">Sector composition</h3>
           <p className="text-sm text-slate-500">Open positions only</p>
           <div className="mt-4 space-y-4">
@@ -154,7 +158,7 @@ export default function DashboardExperience({
             ))}
           </div>
         </div>
-        <div className="rounded-3xl bg-[#0f172a] p-6 text-white shadow-sm">
+        <div className="rounded-lg bg-[#0f172a] p-6 text-white shadow-sm">
           <h3 className="text-lg font-semibold">Insights</h3>
           <p className="mt-2 text-sm text-slate-200">
             Top holdings drive most of the portfolio return. Review concentration risk and trim if needed.

@@ -7,6 +7,7 @@ def ensure_table(cur):
         CREATE TABLE IF NOT EXISTS activities (
             id UUID PRIMARY KEY,
             user_id TEXT NOT NULL,
+            profile_id UUID,
             account_id TEXT NOT NULL,
             source_id TEXT,
 
@@ -29,10 +30,11 @@ def ensure_table(cur):
 
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
 
-            UNIQUE (user_id, external_transaction_id)
+            UNIQUE (user_id, profile_id, external_transaction_id)
         )
         """
     )
+    cur.execute("ALTER TABLE activities ADD COLUMN IF NOT EXISTS profile_id UUID")
 
 
 def batch_upsert(cur, rows, batch_size=1000):
@@ -42,6 +44,7 @@ def batch_upsert(cur, rows, batch_size=1000):
     columns = [
         "id",
         "user_id",
+        "profile_id",
         "account_id",
         "source_id",
         "external_transaction_id",
@@ -64,8 +67,9 @@ def batch_upsert(cur, rows, batch_size=1000):
 
     insert_sql = f"""
         INSERT INTO activities ({", ".join(columns)}) VALUES %s
-        ON CONFLICT (user_id, external_transaction_id) DO UPDATE SET
+        ON CONFLICT (user_id, profile_id, external_transaction_id) DO UPDATE SET
             user_id = EXCLUDED.user_id,
+            profile_id = EXCLUDED.profile_id,
             account_id = EXCLUDED.account_id,
             source_id = EXCLUDED.source_id,
             external_transaction_id = EXCLUDED.external_transaction_id,
@@ -89,26 +93,36 @@ def batch_upsert(cur, rows, batch_size=1000):
     return total
 
 
-def get_distinct_account_ids_for_upload(cur, user_id: str, uploaded_file_name: str) -> list[str]:
+def get_distinct_account_ids_for_upload(cur, user_id: str, uploaded_file_name: str, profile_id: str | None = None) -> list[str]:
+    clauses = ["user_id = %s", "uploaded_file_name = %s", "account_id IS NOT NULL"]
+    params = [user_id, uploaded_file_name]
+    if profile_id:
+        clauses.append("profile_id = %s")
+        params.append(profile_id)
     cur.execute(
-        """
+        f"""
         SELECT DISTINCT account_id
         FROM activities
-        WHERE user_id = %s AND uploaded_file_name = %s AND account_id IS NOT NULL
+        WHERE {' AND '.join(clauses)}
         """,
-        (user_id, uploaded_file_name),
+        tuple(params),
     )
     return [row[0] for row in cur.fetchall()]
 
 
-def get_max_activity_date_for_upload(cur, user_id: str, uploaded_file_name: str):
+def get_max_activity_date_for_upload(cur, user_id: str, uploaded_file_name: str, profile_id: str | None = None):
+    clauses = ["user_id = %s", "uploaded_file_name = %s"]
+    params = [user_id, uploaded_file_name]
+    if profile_id:
+        clauses.append("profile_id = %s")
+        params.append(profile_id)
     cur.execute(
-        """
+        f"""
         SELECT MAX(activity_date)
         FROM activities
-        WHERE user_id = %s AND uploaded_file_name = %s
+        WHERE {' AND '.join(clauses)}
         """,
-        (user_id, uploaded_file_name),
+        tuple(params),
     )
     row = cur.fetchone()
     return row[0] if row else None

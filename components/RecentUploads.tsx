@@ -63,7 +63,7 @@ function formatClientTime(value: string | null) {
 export default function RecentUploads() {
   const [data, setData] = useState<UploadRun[]>([]);
   const [polling, setPolling] = useState(false);
-  const { token } = useAuth();
+  const { token, selectedProfile } = useAuth();
 
   const hasPending = useMemo(
     () => data.some((run) => run.status === "started"),
@@ -76,7 +76,11 @@ export default function RecentUploads() {
     async function load() {
       try {
         if (!token) return;
-        const res = await authFetch("/api/uploads/recent?limit=10", token);
+        const params = new URLSearchParams({ limit: "10" });
+        if (selectedProfile) params.set("profile_id", selectedProfile.id);
+        const res = await authFetch(`/api/uploads/recent?${params.toString()}`, token, {
+          headers: selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {},
+        });
         if (!res.ok) {
           throw new Error("Request failed");
         }
@@ -99,14 +103,16 @@ export default function RecentUploads() {
       clearInterval(timer);
       setPolling(false);
     };
-  }, [token]);
+  }, [token, selectedProfile]);
 
   return (
-    <section className="rounded-3xl bg-white p-8 shadow-sm">
+    <section className="rounded-lg bg-white p-8 shadow-sm">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-slate-900">Recent uploads</h2>
-          <p className="text-sm text-slate-500">Latest ingestion runs from your uploads.</p>
+          <p className="text-sm text-slate-500">
+            Latest ingestion runs for {selectedProfile?.displayName ?? "the selected profile"}.
+          </p>
         </div>
         {polling && hasPending ? (
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -117,14 +123,14 @@ export default function RecentUploads() {
 
       <div className="mt-6 space-y-4">
         {data.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500">
+          <div className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500">
             No upload history yet.
           </div>
         ) : (
           data.map((run) => {
             const status = formatStatus(run.status);
             return (
-              <div key={run.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div key={run.id} className="rounded-lg border border-slate-100 bg-slate-50 p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">{displayName(run.objectName)}</div>

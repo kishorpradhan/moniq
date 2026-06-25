@@ -6,6 +6,7 @@ import firebase_admin
 from firebase_admin import auth as firebase_auth
 from fastapi import HTTPException, Request
 
+from app.repositories import demo_sessions as demo_sessions_repo
 from app.repositories import users as users_repo
 
 logger = logging.getLogger("portfolio-api")
@@ -31,7 +32,36 @@ def _get_bearer_token(request: Request) -> Optional[str]:
     return auth_header.split(" ", 1)[1].strip()
 
 
+def _get_demo_session_id(request: Request) -> Optional[str]:
+    value = request.headers.get("x-moniq-demo-session")
+    return value.strip() if value else None
+
+
+def _demo_user_from_session(request: Request, conn) -> Optional[dict]:
+    session_id = _get_demo_session_id(request)
+    if not session_id:
+        return None
+
+    with conn.cursor() as cur:
+        session = demo_sessions_repo.get_session(cur, session_id)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired demo session")
+        demo_sessions_repo.ensure_demo_user(cur, session["demoUserId"])
+        conn.commit()
+
+    return {
+        "id": session["demoUserId"],
+        "email": demo_sessions_repo.DEMO_EMAIL,
+        "is_demo": True,
+        "demo_session_id": session_id,
+    }
+
+
 def require_user(request: Request, conn) -> dict:
+    demo_user = _demo_user_from_session(request, conn)
+    if demo_user:
+        return demo_user
+
     if os.getenv("AUTH_BYPASS") == "true":
         return {
             "id": os.getenv("AUTH_BYPASS_USER_ID", "test-user"),

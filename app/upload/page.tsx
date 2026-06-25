@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ProfileSelector from "@/components/ProfileSelector";
 import Shell from "@/components/Shell";
 import RecentUploads from "@/components/RecentUploads";
 import { useAuth } from "@/components/AuthProvider";
@@ -11,7 +12,7 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState(false);
-  const { token, user, loading } = useAuth();
+  const { token, user, loading, selectedProfile, isDemo } = useAuth();
 
   const onChooseFile = () => {
     fileInputRef.current?.click();
@@ -24,8 +25,15 @@ export default function UploadPage() {
     try {
       const presignResp = await authFetch("/api/uploads/presign", token, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: file.name, contentType: file.type || "text/csv" }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {}),
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type || "text/csv",
+          profileId: selectedProfile?.id,
+        }),
       });
 
       if (!presignResp.ok) {
@@ -51,8 +59,11 @@ export default function UploadPage() {
       setStatus("Finalizing upload...");
       const completeResp = await authFetch("/api/uploads/complete", token, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filePath }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {}),
+        },
+        body: JSON.stringify({ filePath, profileId: selectedProfile?.id }),
       });
 
       if (!completeResp.ok) {
@@ -70,7 +81,21 @@ export default function UploadPage() {
   if (loading) {
     return (
       <Shell>
-        <section className="rounded-2xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading uploads…</section>
+        <section className="rounded-lg bg-white p-8 text-sm text-slate-500 shadow-sm">Loading uploads…</section>
+      </Shell>
+    );
+  }
+
+  if (isDemo) {
+    return (
+      <Shell>
+        <section className="rounded-lg border border-dashed border-slate-300 bg-white p-8 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Demo mode</p>
+          <h1 className="mt-2 text-2xl font-semibold text-slate-900">Uploads are disabled in the demo</h1>
+          <p className="mt-2 max-w-xl text-sm text-slate-500">
+            The demo uses preloaded profile data so you can explore the same dashboard and chat experience without signing in.
+          </p>
+        </section>
       </Shell>
     );
   }
@@ -85,13 +110,21 @@ export default function UploadPage() {
 
   return (
     <Shell>
-      <header className="rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-bold text-slate-900">Upload Data</h1>
-        <p className="mt-2 text-slate-600">Add portfolio files for analysis and tracking.</p>
+      <header className="rounded-lg bg-white p-8 shadow-sm">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Upload</p>
+          <h1 className="text-3xl font-bold text-slate-900">Upload data</h1>
+          <p className="mt-2 text-slate-600">
+            Add portfolio files for {selectedProfile?.displayName ?? "the selected profile"}.
+          </p>
+        </div>
+        <div className="mt-6">
+          <ProfileSelector />
+        </div>
       </header>
 
-      <section className="rounded-2xl bg-white p-8 shadow-sm">
-        <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+      <section className="rounded-lg bg-white p-8 shadow-sm">
+        <div className="rounded-lg border border-dashed border-slate-300 p-8 text-center">
           <div className="text-lg font-semibold text-slate-800">Upload your portfolio CSV</div>
           <p className="mt-2 text-sm text-slate-500">CSV format: symbol,shares,price</p>
           <input

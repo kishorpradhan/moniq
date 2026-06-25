@@ -13,6 +13,7 @@ from google.auth.transport.requests import Request as GoogleAuthRequest
 from app.auth import require_user
 from app.config.storage import bucket, bucket_name
 from app.db import get_db_conn
+from app.repositories import profiles as profiles_repo
 
 router = APIRouter()
 publisher = pubsub_v1.PublisherClient()
@@ -30,30 +31,47 @@ def sanitize_filename(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]", "_", name)
 
 
+def _requested_profile_id(request: Request, profile_id: str | None = None) -> str | None:
+    return profile_id or request.headers.get("x-moniq-profile-id")
+
+
+def _resolve_profile_id(cur, user_id: str, request: Request, profile_id: str | None = None) -> str:
+    requested = _requested_profile_id(request, profile_id)
+    try:
+        return profiles_repo.resolve_profile_id(cur, user_id, requested)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 class PresignRequest(BaseModel):
     filename: str
     contentType: str
+    profileId: str | None = None
 
 
 class PresignResponse(BaseModel):
     uploadUrl: str
     filePath: str
+    profileId: str
 
 
 class CompleteRequest(BaseModel):
     filePath: str
+    profileId: str | None = None
 
 
 @router.post("/presign", response_model=PresignResponse)
 def presign(payload: PresignRequest, request: Request):
     conn = get_db_conn()
     try:
-        require_user(request, conn)
+        with conn.cursor() as cur:
+            user = require_user(request, conn)
+            profile_id = _resolve_profile_id(cur, user["id"], request, payload.profileId)
     finally:
         conn.close()
 
     safe_name = sanitize_filename(payload.filename)
-    file_path = f"uploads/{int(time.time() * 1000)}-{safe_name}"
+    file_path = f"uploads/{profile_id}/{int(time.time() * 1000)}-{safe_name}"
 
     blob = bucket.blob(file_path)
     if signer_email:
@@ -83,7 +101,7 @@ def presign(payload: PresignRequest, request: Request):
             content_type=payload.contentType,
         )
 
-    return {"uploadUrl": upload_url, "filePath": file_path}
+    return {"uploadUrl": upload_url, "filePath": file_path, "profileId": profile_id}
 
 
 @router.post("/complete")
@@ -99,15 +117,22 @@ def complete(payload: CompleteRequest, request: Request):
 
     conn = get_db_conn()
     try:
-        user = require_user(request, conn)
+        with conn.cursor() as cur:
+            user = require_user(request, conn)
+            profile_id = _resolve_profile_id(cur, user["id"], request, payload.profileId)
     finally:
         conn.close()
 
     message = json.dumps(
-        {"bucket": bucket_name, "name": payload.filePath, "user_id": user["id"]}
+        {
+            "bucket": bucket_name,
+            "name": payload.filePath,
+            "user_id": user["id"],
+            "profile_id": profile_id,
+        }
     ).encode("utf-8")
     publish_future = publisher.publish(topic_path, message)
     publish_future.result(timeout=5)
 
-    print("upload complete", {"filePath": payload.filePath})
-    return {"success": True}
+    print("upload complete", {"filePath": payload.filePath, "profileId": profile_id})
+    return {"success": True, "profileId": profile_id}

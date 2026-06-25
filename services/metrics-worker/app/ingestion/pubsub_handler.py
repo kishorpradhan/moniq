@@ -26,6 +26,7 @@ async def handle_ingestion_complete(request, conn):
 
     user_id = payload.get("user_id")
     account_id = payload.get("account_id")
+    profile_id = payload.get("profile_id")
     as_of_date = payload.get("as_of_date")
 
     if not user_id or not account_id:
@@ -36,12 +37,13 @@ async def handle_ingestion_complete(request, conn):
         extra={
             "user_id": user_id,
             "account_id": account_id,
+            "profile_id": profile_id,
             "ingestion_run_id": payload.get("ingestion_run_id"),
             "object_name": payload.get("object_name"),
         },
     )
 
-    inserted = recompute_for_account(conn, user_id, account_id, _parse_as_of(as_of_date))
+    inserted = recompute_for_account(conn, user_id, account_id, _parse_as_of(as_of_date), profile_id)
     return {"ok": True, "rows_written": inserted}
 
 

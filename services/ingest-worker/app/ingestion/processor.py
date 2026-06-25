@@ -12,7 +12,7 @@ logger = logging.getLogger("ingest-worker")
 
 
 def process_file(
-    conn, bucket: str, name: str, user_id: str | None = None
+    conn, bucket: str, name: str, user_id: str | None = None, profile_id: str | None = None
 ) -> Tuple[int, int, int, Optional[str]]:
     mapper = BrokerCsvV1Mapper()
     parsed_count = 0
@@ -42,6 +42,8 @@ def process_file(
                 mapped["uploaded_file_name"] = name
                 if user_id:
                     mapped["user_id"] = user_id
+                if profile_id:
+                    mapped["profile_id"] = profile_id
             is_valid, errors = validate_activity(mapped)
             if not is_valid:
                 skipped += 1

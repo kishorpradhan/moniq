@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import LockedState from "@/components/LockedState";
 import Shell from "@/components/Shell";
-import { getDemoSessionId } from "@/lib/demoSession";
 
 type ChatMode = "app" | "demo";
 
@@ -55,6 +54,7 @@ const appStarterPrompts = [
 ];
 
 const demoStarterPrompts = [
+  "How is the weather?",
   "What are the top holdings?",
   "How diversified is this portfolio?",
   "Which sectors are overweight?",
@@ -71,44 +71,19 @@ const pipelineSteps = [
 
 const APP_HISTORY_STORAGE_KEY = "moniq_chat_conversation_id";
 const DEMO_HISTORY_STORAGE_KEY = "moniq_demo_chat_conversation_id";
-const DEMO_USAGE_STORAGE_KEY = "moniq_demo_chat_usage";
-const DEMO_DAILY_MESSAGE_LIMIT = 10;
 
 function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function getDemoUsage() {
-  if (typeof window === "undefined") {
-    return { date: todayKey(), messagesUsed: 0 };
-  }
-
-  const fallback = { date: todayKey(), messagesUsed: 0 };
-  const raw = window.localStorage.getItem(DEMO_USAGE_STORAGE_KEY);
-  if (!raw) return fallback;
-
-  try {
-    const parsed = JSON.parse(raw) as { date?: string; messagesUsed?: number };
-    if (parsed.date !== todayKey()) return fallback;
-    return {
-      date: parsed.date,
-      messagesUsed: parsed.messagesUsed ?? 0,
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-function saveDemoUsage(messagesUsed: number) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(
-    DEMO_USAGE_STORAGE_KEY,
-    JSON.stringify({ date: todayKey(), messagesUsed })
-  );
+function introMessage(isDemo: boolean): Message {
+  return {
+    id: makeId(),
+    role: "assistant",
+    content: isDemo
+      ? "Try Moniq with a sample US and India portfolio. Ask about holdings, returns, sectors, or concentration."
+      : "Hi! Ask a portfolio question and I will route it through the chat graph.",
+  };
 }
 
 function formatPayload(payload: ChatRunResponse) {
@@ -125,43 +100,35 @@ export default function ChatExperience({
   embedded?: boolean;
 }) {
   const isDemo = mode === "demo";
-  const storageKey = isDemo ? DEMO_HISTORY_STORAGE_KEY : APP_HISTORY_STORAGE_KEY;
+  const { token, user, userId, selectedProfile, loading, demoSession, updateDemoSession } = useAuth();
+  const profileScopedStorageKey = selectedProfile?.id
+    ? `${isDemo ? DEMO_HISTORY_STORAGE_KEY : APP_HISTORY_STORAGE_KEY}:${selectedProfile.id}`
+    : isDemo
+      ? DEMO_HISTORY_STORAGE_KEY
+      : APP_HISTORY_STORAGE_KEY;
   const starterPrompts = isDemo ? demoStarterPrompts : appStarterPrompts;
-  const { token, user, userId, loading } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: makeId(),
-      role: "assistant",
-      content: isDemo
-        ? "Try Moniq with a sample US and India portfolio. Ask about holdings, returns, sectors, or concentration."
-        : "Hi! Ask a portfolio question and I will route it through the chat graph.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([introMessage(isDemo)]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [lastDebug, setLastDebug] = useState<Record<string, unknown> | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [demoSessionId, setDemoSessionId] = useState<string | null>(null);
-  const [demoMessagesUsed, setDemoMessagesUsed] = useState(0);
+
 
   const canSend = useMemo(() => input.trim().length > 0, [input]);
-  const demoMessagesRemaining = Math.max(0, DEMO_DAILY_MESSAGE_LIMIT - demoMessagesUsed);
-
-  useEffect(() => {
-    if (!isDemo) return;
-    setDemoSessionId(getDemoSessionId());
-    setDemoMessagesUsed(getDemoUsage().messagesUsed);
-  }, [isDemo]);
+  const demoMessagesUsed = demoSession?.llmCallCount ?? 0;
+  const demoMessagesLimit = demoSession?.llmCallLimit ?? 0;
+  const demoMessagesRemaining = Math.max(0, demoMessagesLimit - demoMessagesUsed);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const stored = window.localStorage.getItem(storageKey);
-    if (stored) {
-      setConversationId(stored);
-    }
-  }, [storageKey]);
+    const stored = window.localStorage.getItem(profileScopedStorageKey);
+    setConversationId(stored);
+    setMessages([introMessage(isDemo)]);
+    setError(null);
+    setLastDebug(null);
+  }, [profileScopedStorageKey, isDemo]);
 
   useEffect(() => {
     if (isDemo || !conversationId || !token) return;
@@ -173,8 +140,13 @@ export default function ChatExperience({
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
+            ...(selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {}),
           },
-          body: JSON.stringify({ conversation_id: conversationId, user_id: userId }),
+          body: JSON.stringify({
+            conversation_id: conversationId,
+            user_id: userId,
+            profile_id: selectedProfile?.id,
+          }),
         });
         if (!response.ok) return;
         const payload = (await response.json()) as ChatHistoryResponse;
@@ -194,7 +166,7 @@ export default function ChatExperience({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, isDemo, token, userId]);
+  }, [conversationId, isDemo, token, userId, selectedProfile]);
 
   const handleSend = async () => {
     if (!canSend || isSending) return;
@@ -228,12 +200,15 @@ export default function ChatExperience({
         headers: {
           "Content-Type": "application/json",
           ...(!isDemo && token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(!isDemo && selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {}),
+          ...(isDemo && demoSession ? { "X-Moniq-Demo-Session": demoSession.id } : {}),
         },
         body: JSON.stringify({
           question,
           conversation_id: conversationId,
           user_id: isDemo ? "demo" : userId,
-          demo_session_id: isDemo ? demoSessionId : undefined,
+          profile_id: selectedProfile?.id,
+          demo_session_id: isDemo ? demoSession?.id : undefined,
         }),
       });
       if (!response.ok) {
@@ -245,7 +220,7 @@ export default function ChatExperience({
       if (payload.conversation_id) {
         setConversationId(payload.conversation_id);
         if (typeof window !== "undefined") {
-          window.localStorage.setItem(storageKey, payload.conversation_id);
+          window.localStorage.setItem(profileScopedStorageKey, payload.conversation_id);
         }
       }
 
@@ -256,10 +231,12 @@ export default function ChatExperience({
       );
 
       if (payload.debug) setLastDebug(payload.debug);
-      if (isDemo) {
-        const nextUsed = payload.quota?.messages_used ?? demoMessagesUsed + 1;
-        setDemoMessagesUsed(nextUsed);
-        saveDemoUsage(nextUsed);
+      if (isDemo && payload.quota && demoSession) {
+        updateDemoSession({
+          ...demoSession,
+          llmCallCount: payload.quota.messages_used,
+          llmCallLimit: payload.quota.messages_limit,
+        });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unable to reach chat service.";
@@ -279,7 +256,7 @@ export default function ChatExperience({
   if (!isDemo && loading) {
     return (
       <Shell>
-        <section className="rounded-3xl bg-white p-8 text-sm text-slate-500 shadow-sm">Loading chat...</section>
+        <section className="rounded-lg bg-white p-8 text-sm text-slate-500 shadow-sm">Loading chat...</section>
       </Shell>
     );
   }
@@ -294,48 +271,58 @@ export default function ChatExperience({
 
   const content = (
     <>
-      <header className="rounded-3xl bg-white p-8 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-              {isDemo ? "Demo chat" : "Portfolio chat"}
-            </p>
-            <h1 className="font-display text-3xl text-slate-900">
-              {isDemo ? "Ask Moniq about a sample portfolio." : "Ask Moniq about your portfolio."}
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-slate-500">
-              {isDemo
-                ? "This demo uses read-only sample data. Sign in when you are ready to analyze your own holdings."
-                : "Ask about holdings, performance, allocation, or dividends."}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            {isDemo ? (
-              <Link
-                href="/request-access"
-                className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+      {embedded ? (
+        <header className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Assistant</p>
+          <h2 className="mt-1 text-xl font-semibold text-slate-900">Ask Moniq</h2>
+          <p className="mt-2 text-sm text-slate-500">
+            Questions use {selectedProfile?.displayName ?? "the selected profile"}.
+          </p>
+        </header>
+      ) : (
+        <header className="rounded-lg bg-white p-8 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
+                {isDemo ? "Demo chat" : "Portfolio chat"}
+              </p>
+              <h1 className="font-display text-3xl text-slate-900">
+                {isDemo ? "Ask Moniq about a sample portfolio." : "Ask Moniq about your portfolio."}
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm text-slate-500">
+                {isDemo
+                  ? "This demo uses read-only sample data. Sign in when you are ready to analyze your own holdings."
+                  : "Ask about holdings, performance, allocation, or dividends."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {isDemo ? (
+                <Link
+                  href="/request-access"
+                  className="rounded-full bg-emerald-500 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-600"
+                >
+                  Analyze my portfolio
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setShowDebug((prev) => !prev)}
+                className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
               >
-                Analyze my portfolio
-              </Link>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setShowDebug((prev) => !prev)}
-              className="rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-900"
-            >
-              {showDebug ? "Hide debug" : "Show debug"}
-            </button>
+                {showDebug ? "Hide debug" : "Show debug"}
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
-      <section className={`grid gap-6 ${showDebug ? "lg:grid-cols-[2fr_1fr]" : ""}`}>
-        <div className="flex h-[70vh] flex-col rounded-3xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex-1 space-y-4 overflow-y-auto p-6">
+      <section className={`grid gap-6 ${showDebug && !embedded ? "lg:grid-cols-[2fr_1fr]" : ""}`}>
+        <div className={`flex flex-col rounded-lg border border-slate-200 bg-white shadow-sm ${embedded ? "h-[calc(100vh-11rem)] min-h-[560px]" : "h-[70vh]"}`}>
+          <div className={`flex-1 space-y-4 overflow-y-auto ${embedded ? "p-4" : "p-6"}`}>
             {messages.map((message) => (
               <div
                 key={message.id}
-                className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                className={`max-w-[85%] whitespace-pre-wrap rounded-lg px-4 py-3 text-sm leading-relaxed shadow-sm ${
                   message.role === "user"
                     ? "ml-auto bg-slate-900 text-white"
                     : "bg-slate-100 text-slate-700"
@@ -346,11 +333,11 @@ export default function ChatExperience({
             ))}
           </div>
 
-          <div className="border-t border-slate-100 p-5">
+          <div className={`border-t border-slate-100 ${embedded ? "p-4" : "p-5"}`}>
             {isDemo ? (
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-xs text-emerald-700">
                 <span className="font-semibold">
-                  Demo limit: {demoMessagesUsed} of {DEMO_DAILY_MESSAGE_LIMIT} questions used today
+                  Demo limit: {demoMessagesUsed} of {demoMessagesLimit} questions used
                 </span>
                 <Link href="/request-access" className="font-semibold underline">
                   Continue with my portfolio
@@ -377,8 +364,8 @@ export default function ChatExperience({
             </div>
             <div className="flex gap-3">
               <textarea
-                className="min-h-[52px] flex-1 resize-none rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none focus:border-slate-400"
-                placeholder="Ask about holdings, performance, allocation, or dividends"
+                className="min-h-[52px] flex-1 resize-none rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none focus:border-slate-400"
+                placeholder={embedded ? `Ask about ${selectedProfile?.displayName ?? "this profile"}` : "Ask about holdings, performance, allocation, or dividends"}
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -391,7 +378,7 @@ export default function ChatExperience({
               />
               <button
                 type="button"
-                className={`h-[52px] rounded-2xl px-5 text-sm font-semibold transition ${
+                className={`h-[52px] rounded-lg px-5 text-sm font-semibold transition ${
                   canSend && !isSending && (!isDemo || demoMessagesRemaining > 0)
                     ? "bg-emerald-500 text-white"
                     : "bg-slate-200 text-slate-400"
@@ -405,21 +392,21 @@ export default function ChatExperience({
           </div>
         </div>
 
-        {showDebug ? (
+        {showDebug && !embedded ? (
           <aside className="space-y-4">
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-900">Status</h2>
               <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
                 <div className="font-semibold text-slate-700">Identity</div>
                 <div className="mt-1">
                   {isDemo
-                    ? `demo session ${demoSessionId?.slice(0, 8) ?? "pending"}`
+                    ? `demo session ${demoSession?.id.slice(0, 8) ?? "pending"}`
                     : user?.email ?? "unknown"}
                 </div>
                 <div className="mt-1">Conversation: {conversationId ?? "not started"}</div>
               </div>
             </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-900">Pipeline</h2>
               <div className="mt-4 space-y-3">
                 {pipelineSteps.map((step) => (
@@ -432,7 +419,7 @@ export default function ChatExperience({
                 ))}
               </div>
             </div>
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-900">Debug JSON</h2>
               <pre className="mt-4 max-h-[45vh] overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700">
                 {JSON.stringify(lastDebug ?? {}, null, 2)}

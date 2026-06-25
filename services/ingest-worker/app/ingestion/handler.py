@@ -32,6 +32,7 @@ async def handle_pubsub(request, conn):
     name = payload.get("name")
     generation = payload.get("generation")
     user_id = payload.get("user_id")
+    profile_id = payload.get("profile_id")
 
     if not bucket or not name:
         raise HTTPException(status_code=400, detail="Missing bucket or name")
@@ -44,11 +45,11 @@ async def handle_pubsub(request, conn):
     with conn:
         with conn.cursor() as cur:
             runs_repo.ensure_table(cur)
-            run_id = runs_repo.start_run(cur, bucket, name, generation, user_id)
+            run_id = runs_repo.start_run(cur, bucket, name, generation, user_id, profile_id)
 
         try:
             parsed_count, inserted_count, skipped_count, error_code = process_file(
-                conn, bucket, name, user_id
+                conn, bucket, name, user_id, profile_id
             )
             error = {"code": error_code} if error_code else None
             if error_code:
@@ -90,16 +91,17 @@ async def handle_pubsub(request, conn):
             "parsed": parsed_count,
             "inserted": inserted_count,
             "skipped": skipped_count,
+            "profile_id": profile_id,
         },
     )
 
     if status in ("success", "partial") and inserted_count > 0 and user_id:
         with conn.cursor() as cur:
             account_ids = activities_repo.get_distinct_account_ids_for_upload(
-                cur, user_id, name
+                cur, user_id, name, profile_id
             )
             max_date = activities_repo.get_max_activity_date_for_upload(
-                cur, user_id, name
+                cur, user_id, name, profile_id
             )
 
         events = []
@@ -107,6 +109,7 @@ async def handle_pubsub(request, conn):
             events.append(
                 {
                     "user_id": user_id,
+                    "profile_id": profile_id,
                     "account_id": account_id,
                     "ingestion_run_id": str(run_id),
                     "object_name": name,

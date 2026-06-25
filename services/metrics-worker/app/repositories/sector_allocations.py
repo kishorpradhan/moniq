@@ -11,6 +11,7 @@ def ensure_table(cur):
         CREATE TABLE IF NOT EXISTS portfolio_sector_allocations (
             id UUID PRIMARY KEY,
             user_id TEXT NOT NULL,
+            profile_id UUID,
             account_id TEXT NOT NULL,
             as_of_date DATE NOT NULL,
             sector TEXT NOT NULL,
@@ -19,10 +20,11 @@ def ensure_table(cur):
             currency TEXT NOT NULL DEFAULT 'USD',
             created_at TIMESTAMP NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-            UNIQUE (user_id, account_id, sector, as_of_date)
+            UNIQUE (user_id, profile_id, account_id, sector, as_of_date)
         )
         """
     )
+    cur.execute("ALTER TABLE portfolio_sector_allocations ADD COLUMN IF NOT EXISTS profile_id UUID")
 
 
 def upsert_allocations(cur, rows: Iterable[dict]) -> int:
@@ -33,6 +35,7 @@ def upsert_allocations(cur, rows: Iterable[dict]) -> int:
     columns = [
         "id",
         "user_id",
+        "profile_id",
         "account_id",
         "as_of_date",
         "sector",
@@ -48,6 +51,7 @@ def upsert_allocations(cur, rows: Iterable[dict]) -> int:
             (
                 str(row.get("id") or uuid.uuid4()),
                 row["user_id"],
+                row.get("profile_id"),
                 row["account_id"],
                 row["as_of_date"],
                 row["sector"],
@@ -60,7 +64,7 @@ def upsert_allocations(cur, rows: Iterable[dict]) -> int:
 
     insert_sql = f"""
         INSERT INTO portfolio_sector_allocations ({", ".join(columns)}) VALUES %s
-        ON CONFLICT (user_id, account_id, sector, as_of_date) DO UPDATE SET
+        ON CONFLICT (user_id, profile_id, account_id, sector, as_of_date) DO UPDATE SET
             market_value = EXCLUDED.market_value,
             contribution_pct = EXCLUDED.contribution_pct,
             currency = EXCLUDED.currency,

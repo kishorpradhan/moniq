@@ -26,6 +26,14 @@ def create_user(cur, firebase_uid: str, email: str):
         """,
         (user_id, firebase_uid, email),
     )
+    cur.execute(
+        """
+        INSERT INTO profiles (user_id, display_name, profile_type, is_default)
+        VALUES (%s, 'My Portfolio', 'portfolio', TRUE)
+        ON CONFLICT (user_id, display_name) DO NOTHING
+        """,
+        (user_id,),
+    )
     return {"id": user_id, "email": email}
 
 
