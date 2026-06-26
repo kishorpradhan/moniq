@@ -132,6 +132,7 @@ export default function ChatExperience({
 
   useEffect(() => {
     if (!conversationId) return;
+    if (isSending) return;
     if (!isDemo && !token) return;
     if (isDemo && !demoSession) return;
     let cancelled = false;
