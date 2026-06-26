@@ -155,13 +155,16 @@ export default function ChatExperience({
         if (!response.ok) return;
         const payload = (await response.json()) as ChatHistoryResponse;
         if (!payload.messages?.length || cancelled) return;
-        setMessages(
-          payload.messages.map((message) => ({
+        setMessages((currentMessages) => {
+          if (currentMessages.length > payload.messages.length) {
+            return currentMessages;
+          }
+          return payload.messages.map((message) => ({
             id: makeId(),
             role: message.role,
             content: message.content,
-          }))
-        );
+          }));
+        });
       } catch {
         // Ignore history load errors for now.
       }
