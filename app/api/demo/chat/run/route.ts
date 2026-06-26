@@ -1,9 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { getDemoChatAnswer } from "@/lib/demoData";
-
 const DEMO_SESSION_COOKIE = "moniq_demo_session_id";
+const NO_LLM_RESPONSE_MESSAGE = "Sorry, I've run out of tokens. Please try again.";
 
 function createId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -95,7 +94,7 @@ export async function POST(request: Request) {
         }
       }
     } catch {
-      // Fall through to deterministic demo response.
+      // Fall through to the token-limit response.
     }
   }
 
@@ -103,14 +102,14 @@ export async function POST(request: Request) {
     run_id: createId("demo_run"),
     conversation_id: payload.conversation_id ?? createId("demo_conversation"),
     status: "completed",
-    response: getDemoChatAnswer(payload.question),
+    response: NO_LLM_RESPONSE_MESSAGE,
     quota,
     debug: {
       mode: "demo",
       demo_user_id: consumed.session.demoUserId,
       demo_session_id: demoSessionId,
       profile_id: payload.profile_id ?? null,
-      note: "Fallback demo response used because the chat agent was unavailable or rejected the anonymous demo request.",
+      note: "Token-limit response used because the chat agent returned no usable response.",
     },
   });
 }
