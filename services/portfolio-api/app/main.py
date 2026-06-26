@@ -64,6 +64,19 @@ def create_demo_session(payload: DemoSessionRequest | None = None):
         conn.close()
 
 
+@app.get("/demo/session/{session_id}")
+def get_demo_session(session_id: str):
+    conn = get_db_conn()
+    try:
+        with conn.cursor() as cur:
+            session = demo_sessions_repo.get_session(cur, session_id)
+            if not session:
+                raise HTTPException(status_code=404, detail="Demo session not found")
+            return {"session": session}
+    finally:
+        conn.close()
+
+
 @app.post("/demo/session/consume")
 def consume_demo_session_call(payload: ConsumeDemoCallRequest):
     conn = get_db_conn()

@@ -9,8 +9,9 @@ export async function POST(request: Request) {
     );
   }
 
-  let payload: { conversation_id?: string; user_id?: string | null } = {};
+  let payload: { conversation_id?: string; user_id?: string | null; profile_id?: string | null } = {};
   const authHeader = request.headers.get("authorization");
+  const profileHeader = request.headers.get("x-moniq-profile-id");
   try {
     payload = (await request.json()) as { conversation_id?: string };
   } catch {
@@ -26,10 +27,12 @@ export async function POST(request: Request) {
     headers: {
       "Content-Type": "application/json",
       ...(authHeader ? { Authorization: authHeader } : {}),
+      ...(profileHeader ? { "X-Moniq-Profile-Id": profileHeader } : {}),
     },
     body: JSON.stringify({
       conversation_id: payload.conversation_id,
       user_id: payload.user_id ?? null,
+      profile_id: payload.profile_id ?? profileHeader ?? null,
     }),
   });
 

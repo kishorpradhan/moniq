@@ -187,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSelectedProfileState(null);
     setUserId(null);
     storeDemoSession(null);
+    fetch("/api/demo/session", { method: "DELETE" }).catch(() => undefined);
   }, []);
 
   useEffect(() => {

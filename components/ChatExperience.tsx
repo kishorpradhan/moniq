@@ -131,21 +131,25 @@ export default function ChatExperience({
   }, [profileScopedStorageKey, isDemo]);
 
   useEffect(() => {
-    if (isDemo || !conversationId || !token) return;
+    if (!conversationId) return;
+    if (!isDemo && !token) return;
+    if (isDemo && !demoSession) return;
     let cancelled = false;
     const loadHistory = async () => {
       try {
-        const response = await fetch("/api/chat/history", {
+        const response = await fetch(isDemo ? "/api/demo/chat/history" : "/api/chat/history", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            ...(!isDemo && token ? { Authorization: `Bearer ${token}` } : {}),
             ...(selectedProfile ? { "X-Moniq-Profile-Id": selectedProfile.id } : {}),
+            ...(isDemo && demoSession ? { "X-Moniq-Demo-Session": demoSession.id } : {}),
           },
           body: JSON.stringify({
             conversation_id: conversationId,
-            user_id: userId,
+            user_id: isDemo ? undefined : userId,
             profile_id: selectedProfile?.id,
+            demo_session_id: isDemo ? demoSession?.id : undefined,
           }),
         });
         if (!response.ok) return;
@@ -166,7 +170,7 @@ export default function ChatExperience({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, isDemo, token, userId, selectedProfile]);
+  }, [conversationId, isDemo, token, userId, selectedProfile, demoSession]);
 
   const handleSend = async () => {
     if (!canSend || isSending) return;

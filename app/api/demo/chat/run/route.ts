@@ -1,6 +1,9 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { getDemoChatAnswer } from "@/lib/demoData";
+
+const DEMO_SESSION_COOKIE = "moniq_demo_session_id";
 
 function createId(prefix: string) {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -41,14 +44,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing question." }, { status: 400 });
   }
 
-  if (!payload.demo_session_id) {
+  const demoSessionId = payload.demo_session_id ?? cookies().get(DEMO_SESSION_COOKIE)?.value;
+  if (!demoSessionId) {
     return NextResponse.json({ error: "Missing demo_session_id." }, { status: 400 });
   }
 
   const consumeResponse = await fetch(new URL("/api/demo/session/consume", request.url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ demoSessionId: payload.demo_session_id }),
+    body: JSON.stringify({ demoSessionId }),
   });
 
   if (!consumeResponse.ok) {
@@ -72,7 +76,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Moniq-Demo-Session": payload.demo_session_id,
+          "X-Moniq-Demo-Session": demoSessionId,
           ...(payload.profile_id ? { "X-Moniq-Profile-Id": payload.profile_id } : {}),
         },
         body: JSON.stringify({
@@ -80,7 +84,7 @@ export async function POST(request: Request) {
           conversation_id: payload.conversation_id ?? null,
           user_id: consumed.session.demoUserId,
           profile_id: payload.profile_id ?? null,
-          demo_session_id: payload.demo_session_id,
+          demo_session_id: demoSessionId,
         }),
       });
 
@@ -104,7 +108,7 @@ export async function POST(request: Request) {
     debug: {
       mode: "demo",
       demo_user_id: consumed.session.demoUserId,
-      demo_session_id: payload.demo_session_id,
+      demo_session_id: demoSessionId,
       profile_id: payload.profile_id ?? null,
       note: "Fallback demo response used because the chat agent was unavailable or rejected the anonymous demo request.",
     },
